@@ -1,0 +1,85 @@
+import { getGenerator } from './generators'
+import { baseDates, shiftedDates } from './schedule'
+import type { Plan, Result, SessionType, SetTemplate } from './types'
+
+/**
+ * Combines generator output + overrides + results + today into what the UI
+ * renders. Recomputed on every state change; ~40 sessions, cost is nil.
+ */
+
+export interface SessionView {
+  index: number
+  type: SessionType
+  /** Effective sets: override if present, generated otherwise. */
+  sets: SetTemplate[]
+  generatedSets: SetTemplate[]
+  overridden: boolean
+  /** Result completion date for done sessions, shifted schedule date otherwise. */
+  date: string
+  week: number
+  result?: Result
+  status: 'done' | 'due' | 'upcoming'
+}
+
+export interface PlanView {
+  plan: Plan
+  sessions: SessionView[]
+  /** Session for the Today card: first incomplete one whose date ≤ today. */
+  due: SessionView | null
+  /** Next upcoming session when nothing is due. */
+  next: SessionView | null
+  endDate: string
+  completedCount: number
+}
+
+export function derivePlanView(plan: Plan, results: Result[], today: string): PlanView {
+  const perWeek = Math.max(1, Math.round(plan.params.sessionsPerWeek ?? 3))
+  const templates = getGenerator(plan.generatorId).generate(plan.params, plan.calibrations)
+
+  const resultByIndex = new Map<number, Result>()
+  for (const r of results) {
+    if (r.planId === plan.id) resultByIndex.set(r.sessionIndex, r)
+  }
+
+  let firstIncomplete = templates.findIndex((t) => !resultByIndex.has(t.index))
+  if (firstIncomplete === -1) firstIncomplete = templates.length
+  const dates = shiftedDates(
+    baseDates(plan.startDate, templates.length, perWeek),
+    firstIncomplete,
+    today,
+  )
+
+  const sessions: SessionView[] = templates.map((t, i) => {
+    const result = resultByIndex.get(t.index)
+    const override = plan.overrides[t.index]
+    // Only the first incomplete session can be due — logging is sequential.
+    const status: SessionView['status'] = result
+      ? 'done'
+      : i === firstIncomplete && dates[i] <= today
+        ? 'due'
+        : 'upcoming'
+    return {
+      index: t.index,
+      type: t.type,
+      sets: override ? override.sets : t.sets,
+      generatedSets: t.sets,
+      overridden: Boolean(override),
+      date: result ? result.date : dates[i],
+      week: Math.floor(i / perWeek) + 1,
+      result,
+      status,
+    }
+  })
+
+  const due = sessions.find((s) => s.status === 'due') ?? null
+  const next = due ? null : (sessions.find((s) => s.status === 'upcoming') ?? null)
+
+  return {
+    plan,
+    sessions,
+    due,
+    next,
+    endDate: dates[dates.length - 1],
+    completedCount: resultByIndex.size,
+  }
+}

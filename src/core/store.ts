@@ -1,0 +1,203 @@
+import { signal } from '@preact/signals'
+import { todayISO } from './dates'
+import type {
+  AppData,
+  Exercise,
+  ResultSet,
+  SessionType,
+  SetTemplate,
+  Unit,
+} from './types'
+
+/**
+ * Single source of truth: one signal over the whole AppData blob, persisted to
+ * localStorage on every commit. Data is a few KB — no finer granularity needed.
+ */
+
+const STORAGE_KEY = 'training-pwa'
+
+export const uid = (): string => crypto.randomUUID()
+
+function seed(): AppData {
+  const now = new Date().toISOString()
+  return {
+    version: 1,
+    exercises: [
+      { id: uid(), name: 'Push-ups', emoji: '💪', unit: 'reps', sortOrder: 0, createdAt: now },
+      { id: uid(), name: 'Pull-ups', emoji: '🧗', unit: 'reps', sortOrder: 1, createdAt: now },
+    ],
+    plans: [],
+    results: [],
+  }
+}
+
+function isAppData(value: unknown): value is AppData {
+  const d = value as AppData
+  return (
+    !!d &&
+    d.version === 1 &&
+    Array.isArray(d.exercises) &&
+    Array.isArray(d.plans) &&
+    Array.isArray(d.results)
+  )
+}
+
+function load(): AppData {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      if (isAppData(parsed)) return parsed
+      console.error('Stored data has unexpected shape; starting fresh')
+    }
+  } catch (err) {
+    console.error('Failed to load stored data; starting fresh', err)
+  }
+  return seed()
+}
+
+export const db = signal<AppData>(load())
+
+function update(mutate: (draft: AppData) => void): void {
+  const next = structuredClone(db.value)
+  mutate(next)
+  db.value = next
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
+}
+
+// ---- exercises ----
+
+export function addExercise(name: string, emoji: string, unit: Unit): void {
+  update((d) => {
+    d.exercises.push({
+      id: uid(),
+      name,
+      emoji,
+      unit,
+      sortOrder: Math.max(-1, ...d.exercises.map((e) => e.sortOrder)) + 1,
+      createdAt: new Date().toISOString(),
+    })
+  })
+}
+
+export function updateExercise(id: string, patch: Partial<Pick<Exercise, 'name' | 'emoji' | 'unit'>>): void {
+  update((d) => {
+    const e = d.exercises.find((x) => x.id === id)
+    if (e) Object.assign(e, patch)
+  })
+}
+
+/** Erases the exercise, all its plans and all their results. */
+export function deleteExercise(id: string): void {
+  update((d) => {
+    const planIds = new Set(d.plans.filter((p) => p.exerciseId === id).map((p) => p.id))
+    d.exercises = d.exercises.filter((e) => e.id !== id)
+    d.plans = d.plans.filter((p) => p.exerciseId !== id)
+    d.results = d.results.filter((r) => !planIds.has(r.planId))
+  })
+}
+
+// ---- plans ----
+
+export function createPlan(
+  exerciseId: string,
+  generatorId: string,
+  params: Record<string, number>,
+  startDate: string,
+): void {
+  update((d) => {
+    // Invariant: one active plan per exercise.
+    for (const p of d.plans) {
+      if (p.exerciseId === exerciseId && p.status === 'active') {
+        p.status = 'archived'
+        p.stoppedAt = new Date().toISOString()
+      }
+    }
+    d.plans.push({
+      id: uid(),
+      exerciseId,
+      generatorId,
+      params,
+      status: 'active',
+      startDate,
+      createdAt: new Date().toISOString(),
+      calibrations: [],
+      overrides: {},
+    })
+  })
+}
+
+/** Future sessions re-derive from the new params; past results are untouched. */
+export function updatePlanParams(planId: string, params: Record<string, number>): void {
+  update((d) => {
+    const p = d.plans.find((x) => x.id === planId)
+    if (p) p.params = params
+  })
+}
+
+export function stopPlan(planId: string): void {
+  update((d) => {
+    const p = d.plans.find((x) => x.id === planId)
+    if (p) {
+      p.status = 'archived'
+      p.stoppedAt = new Date().toISOString()
+    }
+  })
+}
+
+/** Erases the plan and its results. Archived history dies with it — confirm in UI. */
+export function deletePlan(planId: string): void {
+  update((d) => {
+    d.plans = d.plans.filter((p) => p.id !== planId)
+    d.results = d.results.filter((r) => r.planId !== planId)
+  })
+}
+
+// ---- overrides ----
+
+export function setOverride(planId: string, sessionIndex: number, sets: SetTemplate[]): void {
+  update((d) => {
+    const p = d.plans.find((x) => x.id === planId)
+    if (p) p.overrides[sessionIndex] = { sets }
+  })
+}
+
+export function clearOverride(planId: string, sessionIndex: number): void {
+  update((d) => {
+    const p = d.plans.find((x) => x.id === planId)
+    if (p) delete p.overrides[sessionIndex]
+  })
+}
+
+// ---- logging ----
+
+export function logSession(
+  planId: string,
+  sessionIndex: number,
+  sessionType: SessionType,
+  sets: ResultSet[],
+  date: string = todayISO(),
+): void {
+  update((d) => {
+    d.results.push({ id: uid(), planId, sessionIndex, date, sessionType, sets })
+    if (sessionType === 'test') {
+      const p = d.plans.find((x) => x.id === planId)
+      // A test's single-set actual becomes the calibration point that bends
+      // the rest of the curve.
+      if (p) p.calibrations.push({ sessionIndex, actual: sets[0]?.actual ?? 0 })
+    }
+  })
+}
+
+// ---- backup ----
+
+export function exportJSON(): string {
+  return JSON.stringify(db.value, null, 2)
+}
+
+export function importJSON(text: string): void {
+  const parsed = JSON.parse(text)
+  if (!isAppData(parsed)) throw new Error('Not a valid backup file')
+  db.value = parsed
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed))
+}

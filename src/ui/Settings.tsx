@@ -1,0 +1,378 @@
+import { useState } from 'preact/hooks'
+import { todayISO } from '../core/dates'
+import { baseDates } from '../core/schedule'
+import { getGenerator, registry } from '../core/generators'
+import {
+  addExercise,
+  createPlan,
+  db,
+  deleteExercise,
+  deletePlan,
+  exportJSON,
+  importJSON,
+  stopPlan,
+  updateExercise,
+  updatePlanParams,
+} from '../core/store'
+import type { Exercise, Plan, Unit } from '../core/types'
+
+export function Settings({ onSelectExercise }: { onSelectExercise: (id: string) => void }) {
+  const data = db.value
+  const exercises = [...data.exercises].sort((a, b) => a.sortOrder - b.sortOrder)
+
+  return (
+    <>
+      <h1>⚙️ Settings</h1>
+
+      <h2>Exercises</h2>
+      {exercises.map((e) => (
+        <ExerciseCard
+          key={e.id}
+          exercise={e}
+          plans={data.plans.filter((p) => p.exerciseId === e.id)}
+          onSelectExercise={onSelectExercise}
+        />
+      ))}
+      <AddExercise />
+
+      <h2>Backup</h2>
+      <Backup />
+
+      <p class="dim" style={{ textAlign: 'center' }}>
+        All data lives on this device only. Export a backup now and then.
+      </p>
+    </>
+  )
+}
+
+// ---- exercises ----
+
+function ExerciseCard({
+  exercise,
+  plans,
+  onSelectExercise,
+}: {
+  exercise: Exercise
+  plans: Plan[]
+  onSelectExercise: (id: string) => void
+}) {
+  const [mode, setMode] = useState<'view' | 'edit' | 'new-plan' | 'edit-plan'>('view')
+  const active = plans.find((p) => p.status === 'active')
+  const archived = plans.filter((p) => p.status === 'archived')
+
+  return (
+    <div class="card">
+      <div class="row">
+        <strong>
+          {exercise.emoji} {exercise.name} <span class="dim">({exercise.unit})</span>
+        </strong>
+        <span>
+          <button class="subtle" onClick={() => setMode(mode === 'edit' ? 'view' : 'edit')}>
+            Edit
+          </button>
+          <button
+            class="danger"
+            onClick={() => {
+              if (confirm(`Delete ${exercise.name}, its plans and ALL logged history?`))
+                deleteExercise(exercise.id)
+            }}
+          >
+            Delete
+          </button>
+        </span>
+      </div>
+
+      {mode === 'edit' && (
+        <ExerciseForm
+          initial={exercise}
+          onSave={(name, emoji, unit) => {
+            updateExercise(exercise.id, { name, emoji, unit })
+            setMode('view')
+          }}
+          onCancel={() => setMode('view')}
+        />
+      )}
+
+      {active ? (
+        <>
+          <p class="dim">
+            {getGenerator(active.generatorId).name} · started {active.startDate}
+            {active.calibrations.length > 0 && ` · ${active.calibrations.length} calibration(s)`}
+          </p>
+          {mode === 'edit-plan' ? (
+            <PlanForm
+              exercise={exercise}
+              initial={active}
+              onDone={() => setMode('view')}
+            />
+          ) : (
+            <div class="row" style={{ justifyContent: 'flex-start' }}>
+              <button class="subtle" onClick={() => onSelectExercise(exercise.id)}>
+                Open
+              </button>
+              <button class="subtle" onClick={() => setMode('edit-plan')}>
+                Edit params
+              </button>
+              <button
+                class="subtle"
+                onClick={() => {
+                  if (confirm('Stop this plan? History is kept.')) stopPlan(active.id)
+                }}
+              >
+                Stop
+              </button>
+              <button
+                class="danger"
+                onClick={() => {
+                  if (confirm('Delete this plan AND its logged sessions?')) deletePlan(active.id)
+                }}
+              >
+                Delete
+              </button>
+            </div>
+          )}
+        </>
+      ) : mode === 'new-plan' ? (
+        <PlanForm exercise={exercise} onDone={() => setMode('view')} />
+      ) : (
+        <button style={{ marginTop: 8 }} onClick={() => setMode('new-plan')}>
+          New plan
+        </button>
+      )}
+
+      {archived.length > 0 && (
+        <p class="dim">
+          {archived.length} archived plan{archived.length > 1 ? 's' : ''} (history counts toward
+          stats)
+          {archived.map((p) => (
+            <button
+              key={p.id}
+              class="danger"
+              onClick={() => {
+                if (confirm(`Delete archived plan from ${p.startDate} and its history?`))
+                  deletePlan(p.id)
+              }}
+            >
+              Delete {p.startDate}
+            </button>
+          ))}
+        </p>
+      )}
+    </div>
+  )
+}
+
+function ExerciseForm({
+  initial,
+  onSave,
+  onCancel,
+}: {
+  initial?: Exercise
+  onSave: (name: string, emoji: string, unit: Unit) => void
+  onCancel?: () => void
+}) {
+  const [name, setName] = useState(initial?.name ?? '')
+  const [emoji, setEmoji] = useState(initial?.emoji ?? '🏋️')
+  const [unit, setUnit] = useState<Unit>(initial?.unit ?? 'reps')
+
+  return (
+    <div style={{ margin: '10px 0' }}>
+      <label>
+        Name
+        <input value={name} onInput={(e) => setName((e.target as HTMLInputElement).value)} />
+      </label>
+      <label>
+        Emoji
+        <input
+          style={{ width: 72, textAlign: 'center' }}
+          value={emoji}
+          onInput={(e) => setEmoji((e.target as HTMLInputElement).value)}
+        />
+      </label>
+      <label>
+        Unit
+        <select value={unit} onChange={(e) => setUnit((e.target as HTMLSelectElement).value as Unit)}>
+          <option value="reps">reps</option>
+          <option value="seconds">seconds</option>
+        </select>
+      </label>
+      <div class="row" style={{ justifyContent: 'flex-start' }}>
+        <button onClick={() => name.trim() && onSave(name.trim(), emoji.trim() || '🏋️', unit)}>
+          Save
+        </button>
+        {onCancel && (
+          <button class="subtle" onClick={onCancel}>
+            Cancel
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function AddExercise() {
+  const [open, setOpen] = useState(false)
+  return (
+    <div class="card">
+      {open ? (
+        <ExerciseForm
+          onSave={(name, emoji, unit) => {
+            addExercise(name, emoji, unit)
+            setOpen(false)
+          }}
+          onCancel={() => setOpen(false)}
+        />
+      ) : (
+        <button onClick={() => setOpen(true)}>+ Add exercise</button>
+      )}
+    </div>
+  )
+}
+
+// ---- plans ----
+
+/** Create (no `initial`) or edit params (with `initial`). Form fields render
+ * themselves from the generator's declarative paramFields. */
+function PlanForm({
+  exercise,
+  initial,
+  onDone,
+}: {
+  exercise: Exercise
+  initial?: Plan
+  onDone: () => void
+}) {
+  const generators = [...registry.values()]
+  const [generatorId, setGeneratorId] = useState(initial?.generatorId ?? generators[0].id)
+  const gen = getGenerator(generatorId)
+  const [params, setParams] = useState<Record<string, number>>(
+    () => initial?.params ?? Object.fromEntries(gen.paramFields.map((f) => [f.key, f.defaultValue])),
+  )
+  const [startDate, setStartDate] = useState(initial?.startDate ?? todayISO())
+
+  // Generic preview through the public generator interface.
+  const preview = (() => {
+    try {
+      const sessions = gen.generate(params, initial?.calibrations ?? [])
+      const perWeek = Math.max(1, Math.round(params.sessionsPerWeek ?? 3))
+      const dates = baseDates(startDate, sessions.length, perWeek)
+      return { count: sessions.length, end: dates[dates.length - 1] }
+    } catch {
+      return null
+    }
+  })()
+
+  const save = () => {
+    if (initial) updatePlanParams(initial.id, params)
+    else createPlan(exercise.id, generatorId, params, startDate)
+    onDone()
+  }
+
+  return (
+    <div style={{ margin: '10px 0' }}>
+      {!initial && generators.length > 1 && (
+        <label>
+          Algorithm
+          <select
+            value={generatorId}
+            onChange={(e) => {
+              const id = (e.target as HTMLSelectElement).value
+              setGeneratorId(id)
+              setParams(
+                Object.fromEntries(getGenerator(id).paramFields.map((f) => [f.key, f.defaultValue])),
+              )
+            }}
+          >
+            {generators.map((g) => (
+              <option key={g.id} value={g.id}>
+                {g.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+      <p class="dim">{gen.description}</p>
+      {gen.paramFields.map((f) => (
+        <label key={f.key}>
+          {f.label}
+          <input
+            type="number"
+            min={f.min}
+            max={f.max}
+            step={f.step}
+            value={params[f.key]}
+            onInput={(e) =>
+              setParams({ ...params, [f.key]: Number((e.target as HTMLInputElement).value) })
+            }
+          />
+        </label>
+      ))}
+      {!initial && (
+        <label>
+          Start date
+          <input
+            type="date"
+            style={{ width: 160 }}
+            value={startDate}
+            onInput={(e) => setStartDate((e.target as HTMLInputElement).value || todayISO())}
+          />
+        </label>
+      )}
+      {preview && (
+        <p class="dim">
+          {preview.count} sessions · ends around {preview.end}
+        </p>
+      )}
+      {initial && <p class="dim">Completed sessions stay as logged; future sessions re-derive.</p>}
+      <div class="row" style={{ justifyContent: 'flex-start' }}>
+        <button class="primary" style={{ width: 'auto' }} onClick={save}>
+          {initial ? 'Save params' : 'Start plan'}
+        </button>
+        <button class="subtle" onClick={onDone}>
+          Cancel
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ---- backup ----
+
+function Backup() {
+  const doExport = () => {
+    const blob = new Blob([exportJSON()], { type: 'application/json' })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = `training-backup-${todayISO()}.json`
+    a.click()
+    URL.revokeObjectURL(a.href)
+  }
+
+  const doImport = (e: Event) => {
+    const input = e.target as HTMLInputElement
+    const file = input.files?.[0]
+    if (!file) return
+    file.text().then((text) => {
+      if (!confirm('Replace ALL current data with this backup?')) return
+      try {
+        importJSON(text)
+        alert('Backup restored.')
+      } catch (err) {
+        alert(`Import failed: ${err instanceof Error ? err.message : err}`)
+      }
+    })
+    input.value = ''
+  }
+
+  return (
+    <div class="card row">
+      <button onClick={doExport}>Export backup</button>
+      <label style={{ margin: 0 }}>
+        <span class="subtle" style={{ color: 'var(--accent)', cursor: 'pointer' }}>
+          Import backup
+          <input type="file" accept="application/json" style={{ display: 'none' }} onChange={doImport} />
+        </span>
+      </label>
+    </div>
+  )
+}
