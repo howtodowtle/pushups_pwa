@@ -1,4 +1,5 @@
 import { render } from 'preact'
+import '@fontsource-variable/outfit/index.css'
 import './index.css'
 import { App } from './ui/App'
 

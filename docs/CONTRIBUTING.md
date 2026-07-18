@@ -132,7 +132,13 @@ user would silently lose their plan to a fresh seed.
   CSS custom properties in `:root` at the top — change the look there, not
   per-component. Dark mode is automatic via `prefers-color-scheme`; every new
   color needs a value that works on both surfaces.
-- System font stack, iOS-flavored. Tap targets ≥ 44px on interactive rows.
+- Typeface is Outfit (variable), self-hosted via `@fontsource-variable/outfit`
+  so it works offline — imported once in `src/main.tsx`. Tap targets ≥ 44px on
+  interactive rows.
+- Motion lives in tokens too (`--dur-*`, `--ease-*`) plus two shared keyframes
+  (`fade-up`, `scale-in`). Reuse those instead of inventing new timings, and
+  never animate without the `prefers-reduced-motion` escape hatch at the bottom
+  of the stylesheet (it already covers plain `animation`/`transition`).
 - Chart colors are `--viz-*` tokens, contrast-validated for both themes. If you
   change them, keep light/dark variants and check contrast against the card
   surface.

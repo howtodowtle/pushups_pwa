@@ -29,11 +29,16 @@ export function ScheduleList({
     <>
       <h2>Schedule</h2>
       <div class="card" style={{ padding: '4px 16px' }}>
-        {upcoming.map((s) =>
+        {upcoming.map((s, i) =>
           open === s.index ? (
             <SessionEditor key={s.index} session={s} planId={planId} onClose={() => setOpen(null)} />
           ) : (
-            <button key={s.index} class="session-row" onClick={() => setOpen(s.index)}>
+            <button
+              key={s.index}
+              class="session-row"
+              style={{ '--i': `${Math.min(i, 10) * 25}ms` }}
+              onClick={() => setOpen(s.index)}
+            >
               <span class="date">{formatDate(s.date, today)}</span>
               <span class="sets-line" style={{ flex: 1 }}>
                 {setsSummary(s.sets, exercise.unit)}
@@ -75,7 +80,7 @@ function SessionEditor({
   }
 
   return (
-    <div style={{ padding: '10px 0', borderBottom: '1px solid var(--line)' }}>
+    <div class="session-editor">
       <div class="dim" style={{ marginBottom: 6 }}>
         Session {session.index} · edit targets
       </div>

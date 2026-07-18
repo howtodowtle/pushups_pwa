@@ -13,8 +13,8 @@ export function HistoryList({ results, unit, today }: { results: Result[]; unit:
     <>
       <h2>History</h2>
       <div class="card" style={{ padding: '4px 16px' }}>
-        {sorted.map((r) => (
-          <div key={r.id} class="session-row done">
+        {sorted.map((r, i) => (
+          <div key={r.id} class="session-row done" style={{ '--i': `${Math.min(i, 10) * 25}ms` }}>
             <span class="date">{formatDate(r.date, today)}</span>
             <span class="sets-line" style={{ flex: 1 }}>
               {actualsSummary(r.sets, unit)}

@@ -16,10 +16,12 @@ recalibrate the plan to your real progress.
 ## Stack
 
 [Vite](https://vitejs.dev) + TypeScript + [Preact](https://preactjs.com) +
-[@preact/signals](https://preactjs.com/guide/v10/signals/), plain CSS,
+[@preact/signals](https://preactjs.com/guide/v10/signals/), plain CSS driven by
+design tokens (no CSS framework), the [Outfit](https://fonts.google.com/specimen/Outfit)
+typeface self-hosted for offline use,
 [vite-plugin-pwa](https://vite-pwa-org.netlify.app) for the service worker,
-[Vitest](https://vitest.dev) for tests. No state library, no CSS framework,
-no backend. Production bundle is ~40 kB of JS.
+[Vitest](https://vitest.dev) for tests. No state library, no backend.
+Production bundle is ~40 kB of JS plus ~60 kB of font.
 
 ## Develop
 

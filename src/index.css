@@ -1,38 +1,65 @@
-/* Design tokens. Change the look here, not per-component. */
+/*
+ * Design tokens. Change the look here, not per-component.
+ * Font: Outfit (variable, self-hosted via @fontsource in main.tsx — works offline).
+ */
 :root {
-  --bg: #f2f2f7;
+  /* -- identity -- */
+  --font-sans: 'Outfit Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+
+  /* -- color -- */
+  --bg: #f4f4fa;
   --card: #ffffff;
-  --text: #1c1c1e;
-  --text-dim: #71717a;
-  --accent: #0a84ff;
+  --text: #17171f;
+  --text-dim: #6f6f80;
+  --accent: #4f46e5;
   --accent-text: #ffffff;
-  --accent-grad: linear-gradient(135deg, #2f97ff, #0a6cf5);
-  --accent-soft: color-mix(in srgb, var(--accent) 12%, transparent);
-  --field: rgba(120, 120, 128, 0.1);
-  --chip: rgba(28, 28, 30, 0.045);
-  --line: rgba(60, 60, 67, 0.14);
-  --danger: #ff3b30;
-  --ok: #30d158;
-  --warn: #ff9f0a;
+  --accent-grad: linear-gradient(135deg, #6366f1, #8b5cf6);
+  --accent-soft: color-mix(in srgb, var(--accent) 10%, transparent);
+  --field: rgba(120, 120, 140, 0.1);
+  --chip: rgba(40, 40, 70, 0.05);
+  --line: rgba(70, 70, 95, 0.14);
+  --danger: #e5484d;
+  --ok: #059669;
+  --warn: #d97706;
+
+  /* -- elevation (layered, violet-tinted — depth without gray mud) -- */
+  --shadow-card: 0 1px 2px hsl(247 32% 25% / 0.05), 0 10px 28px -10px hsl(247 32% 25% / 0.1);
+  --shadow-pop: 0 2px 6px hsl(247 32% 20% / 0.07), 0 16px 40px -12px hsl(247 32% 20% / 0.2);
+  --glow-accent: 0 8px 24px -8px color-mix(in srgb, var(--accent) 60%, transparent);
+
+  /* -- shape -- */
   --radius: 20px;
   --radius-sm: 12px;
-  --shadow-card: 0 1px 1px rgba(16, 24, 40, 0.03), 0 8px 24px -12px rgba(16, 24, 40, 0.14);
-  --font-round: ui-rounded, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+
+  /* -- motion -- */
+  --dur-fast: 140ms;
+  --dur: 220ms;
+  --dur-slow: 340ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  font-family: var(--font-sans);
   color-scheme: light dark;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #000000;
-    --card: #1c1c1e;
-    --text: #f2f2f7;
-    --text-dim: #9a9aa2;
-    --accent: #3d9bff;
-    --field: rgba(120, 120, 128, 0.2);
-    --chip: rgba(255, 255, 255, 0.07);
-    --line: rgba(84, 84, 88, 0.48);
-    --shadow-card: none;
+    --bg: #0a0a12;
+    --card: #16161f;
+    --text: #f1f1f7;
+    --text-dim: #a0a0b2;
+    --accent: #8b8df6;
+    --accent-grad: linear-gradient(135deg, #6e72f7, #a78bfa);
+    --accent-soft: color-mix(in srgb, var(--accent) 14%, transparent);
+    --field: rgba(140, 140, 170, 0.15);
+    --chip: rgba(255, 255, 255, 0.055);
+    --line: rgba(130, 130, 160, 0.2);
+    --danger: #ff6369;
+    --ok: #34d399;
+    --warn: #fbbf24;
+    --shadow-card: 0 1px 2px rgb(0 0 0 / 0.35), 0 10px 28px -10px rgb(0 0 0 / 0.55);
+    --shadow-pop: 0 2px 8px rgb(0 0 0 / 0.5), 0 18px 44px -12px rgb(0 0 0 / 0.7);
+    --glow-accent: 0 8px 26px -8px color-mix(in srgb, var(--accent) 45%, transparent);
   }
 }
 
@@ -54,6 +81,14 @@ body {
   font-size: 16px;
   line-height: 1.45;
   -webkit-font-smoothing: antialiased;
+  /* Soft accent aura behind the top of the page. */
+  background-color: var(--bg);
+  background-image: radial-gradient(
+    640px 320px at 50% -120px,
+    color-mix(in srgb, var(--accent) 9%, transparent),
+    transparent 70%
+  );
+  background-repeat: no-repeat;
 }
 
 #app {
@@ -108,6 +143,7 @@ h2 {
   padding: 16px 18px;
   margin-bottom: 12px;
   box-shadow: var(--shadow-card);
+  animation: fade-up var(--dur-slow) var(--ease-out) backwards;
 }
 
 .row {
@@ -128,7 +164,11 @@ button {
   background: var(--accent-soft);
   color: var(--accent);
   cursor: pointer;
-  transition: transform 0.12s ease, opacity 0.15s ease, background 0.15s ease;
+  transition:
+    transform var(--dur-fast) var(--ease-out),
+    opacity var(--dur-fast) ease,
+    background var(--dur-fast) ease,
+    box-shadow var(--dur-fast) ease;
 }
 
 button:active {
@@ -144,11 +184,12 @@ button.primary {
   width: 100%;
   padding: 15px;
   border-radius: 14px;
-  box-shadow: 0 6px 20px -6px rgba(10, 132, 255, 0.5);
+  box-shadow: var(--glow-accent);
 }
 
 button.primary:active {
   transform: scale(0.98);
+  box-shadow: 0 3px 10px -4px color-mix(in srgb, var(--accent) 55%, transparent);
 }
 
 button.subtle {
@@ -163,6 +204,23 @@ button.danger {
   padding: 8px 10px;
 }
 
+/* Desktop niceties — never triggered by touch. */
+@media (hover: hover) {
+  button:hover {
+    background: color-mix(in srgb, var(--accent) 16%, transparent);
+  }
+
+  button.primary:hover {
+    transform: translateY(-1px);
+    filter: brightness(1.04);
+  }
+
+  button.subtle:hover,
+  button.danger:hover {
+    background: var(--field);
+  }
+}
+
 input,
 select {
   font: inherit;
@@ -172,6 +230,7 @@ select {
   border-radius: 10px;
   padding: 10px 12px;
   width: 100%;
+  transition: box-shadow var(--dur-fast) ease;
 }
 
 input:focus-visible,
@@ -231,7 +290,7 @@ label {
 
 .today-card {
   background:
-    linear-gradient(165deg, color-mix(in srgb, var(--accent) 13%, var(--card)), var(--card) 60%);
+    linear-gradient(165deg, color-mix(in srgb, var(--accent) 14%, var(--card)), var(--card) 62%);
 }
 
 .eyebrow {
@@ -270,7 +329,6 @@ label {
 }
 
 .set-chip .n {
-  font-family: var(--font-round);
   font-size: 1.55rem;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
@@ -299,6 +357,7 @@ label {
 .empty {
   text-align: center;
   padding: 28px 18px;
+  animation: scale-in var(--dur-slow) var(--ease-spring) backwards;
 }
 
 .empty {
@@ -334,10 +393,18 @@ label {
   padding: 14px 10px 11px;
   text-align: center;
   box-shadow: var(--shadow-card);
+  animation: fade-up var(--dur-slow) var(--ease-out) backwards;
+}
+
+.stat:nth-child(2) {
+  animation-delay: 50ms;
+}
+
+.stat:nth-child(3) {
+  animation-delay: 100ms;
 }
 
 .stat .value {
-  font-family: var(--font-round);
   font-size: 1.45rem;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
@@ -367,7 +434,10 @@ label {
   text-align: left;
   color: var(--text);
   font-weight: 400;
-  transition: background 0.15s ease;
+  transition: background var(--dur-fast) ease;
+  /* Rows cascade in; components set --i per row. */
+  animation: fade-up 0.3s var(--ease-out) backwards;
+  animation-delay: var(--i, 0ms);
 }
 
 .session-row:active {
@@ -395,6 +465,18 @@ label {
 
 .session-row.done .sets-line {
   color: var(--text-dim);
+}
+
+@media (hover: hover) {
+  .session-row:hover {
+    background: var(--field);
+  }
+}
+
+.session-editor {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+  animation: scale-in var(--dur) var(--ease-out);
 }
 
 /* ---- tab bar ---- */
@@ -437,7 +519,7 @@ label {
   line-height: 1.25;
   padding: 3px 16px;
   border-radius: 999px;
-  transition: background 0.2s ease;
+  transition: background var(--dur) var(--ease-out);
 }
 
 .tabbar button.active {
@@ -452,14 +534,14 @@ label {
 
 /* Series colors — contrast-validated for both surfaces (see Chart.tsx). */
 :root {
-  --viz-planned: #2a78d6;
-  --viz-actual: #008300;
+  --viz-planned: #4f46e5;
+  --viz-actual: #047857;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --viz-planned: #3987e5;
-    --viz-actual: #008300;
+    --viz-planned: #8b8df6;
+    --viz-actual: #34d399;
   }
 }
 
@@ -523,13 +605,37 @@ label {
   font-size: 0.8rem;
   pointer-events: none;
   white-space: nowrap;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.16);
+  box-shadow: var(--shadow-pop);
+  animation: scale-in var(--dur-fast) var(--ease-out);
 }
 
 /* ---- motion ---- */
 
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     transition: none !important;
+    animation: none !important;
   }
 }
