@@ -1,6 +1,6 @@
 import { getGenerator } from './generators'
-import { baseDates, perWeekOf, shiftedDates } from './schedule'
-import type { Plan, Result, SessionType, SetTemplate } from './types'
+import { baseDates, perWeekOf, shiftedDates, weekOf } from './schedule'
+import type { CalibrationPoint, Plan, Result, SessionType, SetTemplate } from './types'
 
 /**
  * Combines generator output + overrides + results + today into what the UI
@@ -65,7 +65,7 @@ export function derivePlanView(plan: Plan, results: Result[], today: string): Pl
       sets: override ? override.sets : t.sets,
       overridden: Boolean(override),
       date: result ? result.date : dates[i],
-      week: Math.floor(i / perWeek) + 1,
+      week: weekOf(i, perWeek) + 1,
       result,
       status,
       predictedMax: t.predictedMax,
@@ -83,6 +83,21 @@ export function derivePlanView(plan: Plan, results: Result[], today: string): Pl
     endDate: dates[dates.length - 1],
     completedCount: resultByIndex.size,
   }
+}
+
+/**
+ * Session count + end date a (generator, params, start date) combo would
+ * produce — the plan-form preview, derived the same way a real plan is.
+ */
+export function previewPlan(
+  generatorId: string,
+  params: Record<string, number>,
+  startDate: string,
+  calibrations: CalibrationPoint[],
+): { count: number; end: string } {
+  const sessions = getGenerator(generatorId).generate(params, calibrations)
+  const dates = baseDates(startDate, sessions.length, perWeekOf(params))
+  return { count: sessions.length, end: dates[dates.length - 1] }
 }
 
 /**

@@ -39,6 +39,8 @@
   --dur: 200ms;
   --dur-slow: 300ms;
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  /* the shared entry animation for cards, stats and list rows */
+  --anim-in: fade-up var(--dur-slow) var(--ease-out-expo) backwards;
 
   /* -- chart series: muted planned line, terracotta done dots; shape + legend
         also carry identity so the accent is never the only signal. -- */
@@ -127,7 +129,7 @@ h2 {
 
 .card {
   margin-bottom: 12px;
-  animation: fade-up var(--dur-slow) var(--ease-out-expo) backwards;
+  animation: var(--anim-in);
 }
 
 .row {
@@ -272,7 +274,7 @@ label {
   border-radius: var(--radius-xl);
   padding: 14px 10px 11px;
   text-align: center;
-  animation: fade-up var(--dur-slow) var(--ease-out-expo) backwards;
+  animation: var(--anim-in);
 }
 
 .stat:nth-child(2) {
@@ -316,7 +318,7 @@ label {
   cursor: pointer;
   transition: background var(--dur-fast) ease;
   /* Rows cascade in; components set --i per row. */
-  animation: fade-up var(--dur-slow) var(--ease-out-expo) backwards;
+  animation: var(--anim-in);
   animation-delay: var(--i, 0ms);
 }
 

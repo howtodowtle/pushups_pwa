@@ -10,7 +10,7 @@ export function todayISO(now: Date = new Date()): string {
   return `${y}-${m}-${d}`
 }
 
-function toUTCNoon(iso: string): number {
+export function toUTCNoon(iso: string): number {
   const [y, m, d] = iso.split('-').map(Number)
   return Date.UTC(y, m - 1, d, 12)
 }
@@ -21,20 +21,4 @@ export function addDays(iso: string, days: number): string {
 
 export function daysBetween(fromISO: string, toISO: string): number {
   return Math.round((toUTCNoon(toISO) - toUTCNoon(fromISO)) / 86400_000)
-}
-
-export function formatDate(iso: string, today: string): string {
-  const diff = daysBetween(today, iso)
-  if (diff === 0) return 'Today'
-  if (diff === 1) return 'Tomorrow'
-  if (diff === -1) return 'Yesterday'
-  const date = new Date(toUTCNoon(iso))
-  const sameYear = iso.slice(0, 4) === today.slice(0, 4)
-  return date.toLocaleDateString(undefined, {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    timeZone: 'UTC',
-    ...(sameYear ? {} : { year: 'numeric' }),
-  })
 }

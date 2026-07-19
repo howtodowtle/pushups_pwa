@@ -4,6 +4,7 @@ import type {
   AppData,
   Exercise,
   Plan,
+  Result,
   ResultSet,
   SessionType,
   SetTemplate,
@@ -18,9 +19,10 @@ import type {
 const STORAGE_KEY = 'training-pwa'
 
 const uid = (): string => crypto.randomUUID()
+const nowISO = (): string => new Date().toISOString()
 
 function seed(): AppData {
-  const now = new Date().toISOString()
+  const now = nowISO()
   return {
     version: 1,
     exercises: [
@@ -93,7 +95,7 @@ export function addExercise(name: string, emoji: string, unit: Unit): void {
       emoji,
       unit,
       sortOrder: Math.max(-1, ...d.exercises.map((e) => e.sortOrder)) + 1,
-      createdAt: new Date().toISOString(),
+      createdAt: nowISO(),
     })
   })
 }
@@ -117,9 +119,19 @@ export function deleteExercise(id: string): void {
 
 // ---- plans ----
 
+/** The one active plan of an exercise, if any. */
+export const activePlanFor = (d: AppData, exerciseId: string): Plan | undefined =>
+  d.plans.find((p) => p.exerciseId === exerciseId && p.status === 'active')
+
+/** Results across all plans (active and archived) of an exercise. */
+export function resultsForExercise(d: AppData, exerciseId: string): Result[] {
+  const planIds = new Set(d.plans.filter((p) => p.exerciseId === exerciseId).map((p) => p.id))
+  return d.results.filter((r) => planIds.has(r.planId))
+}
+
 function archive(p: Plan): void {
   p.status = 'archived'
-  p.stoppedAt = new Date().toISOString()
+  p.stoppedAt = nowISO()
 }
 
 export function createPlan(
@@ -140,7 +152,7 @@ export function createPlan(
       params,
       status: 'active',
       startDate,
-      createdAt: new Date().toISOString(),
+      createdAt: nowISO(),
       calibrations: [],
       overrides: {},
     })

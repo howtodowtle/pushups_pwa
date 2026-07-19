@@ -1,9 +1,9 @@
 import { derivePlanView, predictedMaxIndex } from '../core/derive'
-import { formatDate } from '../core/dates'
 import { exerciseStats } from '../core/stats'
-import { db } from '../core/store'
+import { activePlanFor, db, resultsForExercise } from '../core/store'
 import type { Exercise } from '../core/types'
 import { Chart } from './Chart'
+import { formatDate } from './format'
 import { HistoryList } from './HistoryList'
 import { ScheduleList } from './ScheduleList'
 import { RestCard, TodayCard } from './TodayCard'
@@ -18,11 +18,10 @@ export function ExerciseTab({
   onOpenSettings: () => void
 }) {
   const data = db.value
-  const activePlan = data.plans.find((p) => p.exerciseId === exercise.id && p.status === 'active')
-  const planIds = new Set(data.plans.filter((p) => p.exerciseId === exercise.id).map((p) => p.id))
-  const results = data.results.filter((r) => planIds.has(r.planId))
+  const activePlan = activePlanFor(data, exercise.id)
+  const results = resultsForExercise(data, exercise.id)
   const stats = exerciseStats(results, today)
-  const view = activePlan ? derivePlanView(activePlan, data.results, today) : null
+  const view = activePlan ? derivePlanView(activePlan, results, today) : null
   // History rows of the active plan show the max they were planned around.
   const predictedMax = view ? predictedMaxIndex(view) : undefined
 

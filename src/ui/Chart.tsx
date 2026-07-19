@@ -1,9 +1,8 @@
 import { useRef, useState } from 'preact/hooks'
 import type { SessionView } from '../core/derive'
-import { formatDate } from '../core/dates'
-import { sumActual } from '../core/stats'
+import { sumActual, sumTarget } from '../core/stats'
 import type { Unit } from '../core/types'
-import { maxHint, unitSuffix } from './format'
+import { formatDate, maxHint, unitSuffix } from './format'
 
 /**
  * Progress chart: planned session volume as a line, completed volume as dots,
@@ -18,8 +17,6 @@ const H = 190
 const PAD = { top: 12, right: 12, bottom: 24, left: 34 }
 const PAD_RIGHT_AXIS = 34 // right padding when the predicted-max axis is shown
 
-const volume = (sets: { target: number }[]) => sets.reduce((s, x) => s + x.target, 0)
-
 function niceTicks(max: number): number[] {
   const step = [1, 2, 5, 10, 20, 25, 50, 100, 200, 500].find((s) => max / s <= 4) ?? 1000
   const ticks = []
@@ -33,7 +30,7 @@ export function Chart({ sessions, unit, today }: { sessions: SessionView[]; unit
 
   if (sessions.length < 2) return null
 
-  const planned = sessions.map((s) => volume(s.sets))
+  const planned = sessions.map((s) => sumTarget(s.sets))
   const actuals = sessions.map((s) => (s.result ? sumActual(s.result.sets) : null))
   const predicted = sessions.map((s) => s.predictedMax ?? null)
   const hasMax = predicted.some((v) => v !== null)
@@ -45,15 +42,22 @@ export function Chart({ sessions, unit, today }: { sessions: SessionView[]; unit
   const ticks2 = hasMax ? niceTicks(maxY2).filter((t) => t > 0) : []
 
   const x = (i: number) => PAD.left + (i * (W - PAD.left - padRight)) / (sessions.length - 1)
-  const y = (v: number) => H - PAD.bottom - (v / maxY) * (H - PAD.top - PAD.bottom)
-  const y2 = (v: number) => H - PAD.bottom - (v / maxY2) * (H - PAD.top - PAD.bottom)
+  const scaleY = (max: number) => (v: number) =>
+    H - PAD.bottom - (v / max) * (H - PAD.top - PAD.bottom)
+  const y = scaleY(maxY)
+  const y2 = scaleY(maxY2)
 
-  const linePath = planned.map((v, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ')
-  const maxPath = hasMax
-    ? predicted
-        .map((v, i) => (v === null ? '' : `${i === 0 || predicted[i - 1] === null ? 'M' : 'L'}${x(i).toFixed(1)},${y2(v).toFixed(1)}`))
-        .join(' ')
-    : ''
+  // M starts a subpath at the first point and after every null gap.
+  const buildPath = (values: (number | null)[], yOf: (v: number) => number) =>
+    values
+      .map((v, i) =>
+        v === null
+          ? ''
+          : `${i === 0 || values[i - 1] === null ? 'M' : 'L'}${x(i).toFixed(1)},${yOf(v).toFixed(1)}`,
+      )
+      .join(' ')
+  const linePath = buildPath(planned, y)
+  const maxPath = hasMax ? buildPath(predicted, y2) : ''
 
   const weekTicks = sessions
     .map((s, i) => ({ week: s.week, i }))
@@ -70,6 +74,7 @@ export function Chart({ sessions, unit, today }: { sessions: SessionView[]; unit
   }
 
   const sel = picked !== null ? sessions[picked] : null
+  const selX = picked !== null ? x(picked) : 0
   const sfx = unitSuffix(unit)
 
   return (
@@ -102,8 +107,8 @@ export function Chart({ sessions, unit, today }: { sessions: SessionView[]; unit
           </text>
         ))}
 
-        {picked !== null && (
-          <line x1={x(picked)} x2={x(picked)} y1={PAD.top} y2={H - PAD.bottom} class="viz-crosshair" />
+        {sel && (
+          <line x1={selX} x2={selX} y1={PAD.top} y2={H - PAD.bottom} class="viz-crosshair" />
         )}
 
         {hasMax && <path d={maxPath} class="viz-maxline" />}
@@ -142,11 +147,11 @@ export function Chart({ sessions, unit, today }: { sessions: SessionView[]; unit
       </div>
       </section>
 
-      {sel && picked !== null && (
-        <div class="viz-tooltip" style={{ left: `${(x(picked) / W) * 100}%` }}>
+      {sel && (
+        <div class="viz-tooltip" style={{ left: `${(selX / W) * 100}%` }}>
           <strong>Session {sel.index}</strong> · {formatDate(sel.date, today)}
           <br />
-          planned {planned[picked]}
+          planned {sumTarget(sel.sets)}
           {sfx}
           {sel.result ? ` · done ${sumActual(sel.result.sets)}${sfx}` : ''}
           {sel.predictedMax != null ? ` · ${maxHint(sel.predictedMax, unit)}` : ''}

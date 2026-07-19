@@ -1,9 +1,8 @@
 import { useState } from 'preact/hooks'
 import type { SessionView } from '../core/derive'
-import { formatDate } from '../core/dates'
 import { logSession } from '../core/store'
 import type { Exercise, ResultSet } from '../core/types'
-import { SessionBadges, unitSuffix } from './format'
+import { formatDate, SessionBadges, unitSuffix } from './format'
 
 /**
  * One-tap logging: Done logs every set at target. Sets that need a real

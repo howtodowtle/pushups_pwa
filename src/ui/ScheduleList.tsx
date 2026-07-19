@@ -1,9 +1,8 @@
 import { useState } from 'preact/hooks'
 import type { SessionView } from '../core/derive'
-import { formatDate } from '../core/dates'
 import { clearOverride, setOverride } from '../core/store'
 import type { Exercise } from '../core/types'
-import { maxHint, SessionBadges, setsSummary } from './format'
+import { formatDate, maxHint, SessionBadges, setsSummary, stagger } from './format'
 
 /**
  * Upcoming sessions. Tapping a row opens an inline editor; saving stores a
@@ -37,7 +36,7 @@ export function ScheduleList({
               <button
                 key={s.index}
                 class="session-row"
-                style={{ '--i': `${Math.min(i, 10) * 25}ms` }}
+                style={stagger(i)}
                 onClick={() => setOpen(s.index)}
               >
                 <span class="date">{formatDate(s.date, today)}</span>

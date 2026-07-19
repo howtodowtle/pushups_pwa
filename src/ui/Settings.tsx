@@ -1,6 +1,6 @@
 import { useState } from 'preact/hooks'
 import { todayISO } from '../core/dates'
-import { baseDates, perWeekOf } from '../core/schedule'
+import { previewPlan } from '../core/derive'
 import { getGenerator, registry } from '../core/generators'
 import {
   addExercise,
@@ -293,12 +293,11 @@ function PlanForm({
   )
   const [startDate, setStartDate] = useState(initial?.startDate ?? todayISO())
 
-  // Generic preview through the public generator interface.
+  // Preview through the same derivation path a real plan uses; params can be
+  // mid-edit garbage, hence the catch.
   const preview = (() => {
     try {
-      const sessions = gen.generate(params, initial?.calibrations ?? [])
-      const dates = baseDates(startDate, sessions.length, perWeekOf(params))
-      return { count: sessions.length, end: dates[dates.length - 1] }
+      return previewPlan(generatorId, params, startDate, initial?.calibrations ?? [])
     } catch {
       return null
     }

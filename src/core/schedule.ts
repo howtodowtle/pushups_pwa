@@ -21,12 +21,14 @@ export function perWeekOf(params: Record<string, number>): number {
   return Math.min(7, Math.max(1, Math.round(params.sessionsPerWeek ?? 3)))
 }
 
+/** 0-based week a session index falls in. */
+export const weekOf = (i: number, perWeek: number): number => Math.floor(i / perWeek)
+
 export function baseDates(startDate: string, total: number, perWeek: number): string[] {
   const offsets = Array.from({ length: perWeek }, (_, d) => Math.floor((d * 7) / perWeek))
   return Array.from({ length: total }, (_, i) => {
-    const week = Math.floor(i / perWeek)
     const day = i % perWeek
-    return addDays(startDate, week * 7 + offsets[day])
+    return addDays(startDate, weekOf(i, perWeek) * 7 + offsets[day])
   })
 }
 

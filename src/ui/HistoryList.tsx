@@ -1,6 +1,5 @@
-import { formatDate } from '../core/dates'
 import type { Result, Unit } from '../core/types'
-import { actualsSummary, maxHint, SessionBadges } from './format'
+import { actualsSummary, formatDate, maxHint, SessionBadges, stagger } from './format'
 
 /** Past sessions, newest first — across all plans of the exercise. */
 export function HistoryList({
@@ -25,20 +24,19 @@ export function HistoryList({
       <h2>History</h2>
       <div class="card" data-size="sm" style={{ paddingBlock: 4 }}>
         <section>
-          {sorted.map((r, i) => (
-            <div key={r.id} class="session-row done" style={{ '--i': `${Math.min(i, 10) * 25}ms` }}>
-              <span class="date">{formatDate(r.date, today)}</span>
-              <span class="sets-line" style={{ flex: 1 }}>
-                {actualsSummary(r.sets, unit)}
-              </span>
-              <SessionBadges type={r.sessionType} />
-              {predictedMax?.has(`${r.planId}:${r.sessionIndex}`) && (
-                <span class="max-hint">
-                  {maxHint(predictedMax.get(`${r.planId}:${r.sessionIndex}`)!, unit)}
+          {sorted.map((r, i) => {
+            const pm = predictedMax?.get(`${r.planId}:${r.sessionIndex}`)
+            return (
+              <div key={r.id} class="session-row done" style={stagger(i)}>
+                <span class="date">{formatDate(r.date, today)}</span>
+                <span class="sets-line" style={{ flex: 1 }}>
+                  {actualsSummary(r.sets, unit)}
                 </span>
-              )}
-            </div>
-          ))}
+                <SessionBadges type={r.sessionType} />
+                {pm != null && <span class="max-hint">{maxHint(pm, unit)}</span>}
+              </div>
+            )
+          })}
         </section>
       </div>
     </>

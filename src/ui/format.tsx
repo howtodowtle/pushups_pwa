@@ -1,4 +1,25 @@
+import { toUTCNoon } from '../core/dates'
 import type { ResultSet, SessionType, SetTemplate, Unit } from '../core/types'
+
+/** "Today" / "Tomorrow" / "Yesterday", otherwise a short weekday-and-date. */
+export function formatDate(iso: string, today: string): string {
+  const noon = toUTCNoon(iso)
+  const diff = Math.round((noon - toUTCNoon(today)) / 86400_000)
+  if (diff === 0) return 'Today'
+  if (diff === 1) return 'Tomorrow'
+  if (diff === -1) return 'Yesterday'
+  const sameYear = iso.slice(0, 4) === today.slice(0, 4)
+  return new Date(noon).toLocaleDateString(undefined, {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    timeZone: 'UTC',
+    ...(sameYear ? {} : { year: 'numeric' }),
+  })
+}
+
+/** Staggered entry-animation delay for list rows, capped so long lists don't crawl. */
+export const stagger = (i: number) => ({ '--i': `${Math.min(i, 10) * 25}ms` })
 
 export const unitSuffix = (unit: Unit): string => (unit === 'seconds' ? 's' : '')
 
@@ -23,18 +44,14 @@ const TYPE_LABEL: Record<SessionType, string> = {
   recovery: 'Recovery',
 }
 
-/** Basecoat badge variant per session type: tests get the strong (primary)
- * badge, everything else the muted secondary one. */
-const badgeVariant = (type: SessionType): string | undefined =>
-  type === 'test' ? undefined : 'secondary'
-
 /** The session-type badge plus the "edited" (override) badge, shared by the
- * today card, schedule rows and history rows. */
+ * today card, schedule rows and history rows. Tests get the strong (primary)
+ * badge, everything else the muted secondary one. */
 export function SessionBadges({ type, overridden }: { type: SessionType; overridden?: boolean }) {
   return (
     <>
       {type !== 'normal' && (
-        <span class="badge" data-variant={badgeVariant(type)}>
+        <span class="badge" data-variant={type === 'test' ? undefined : 'secondary'}>
           {TYPE_LABEL[type]}
         </span>
       )}

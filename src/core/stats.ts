@@ -16,6 +16,10 @@ export interface ExerciseStats {
 export const sumActual = (sets: { actual: number }[]): number =>
   sets.reduce((sum, s) => sum + s.actual, 0)
 
+/** Sum of targets across a set list. */
+export const sumTarget = (sets: { target: number }[]): number =>
+  sets.reduce((sum, s) => sum + s.target, 0)
+
 /** `results` must already be filtered to one exercise (any of its plans). */
 export function exerciseStats(results: Result[], today: string): ExerciseStats {
   const sorted = [...results].sort((a, b) => a.date.localeCompare(b.date))
