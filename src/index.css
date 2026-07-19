@@ -395,6 +395,13 @@ label {
   transition: background var(--dur-fast) ease;
 }
 
+/* Help sits one slot left of the gear (40px button + 8px gap). */
+.help-btn {
+  right: max(62px, calc(50vw - 280px + 62px));
+  font-size: 1rem;
+  font-weight: 600;
+}
+
 .settings-btn:active {
   background: var(--muted);
 }

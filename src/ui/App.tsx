@@ -2,6 +2,7 @@ import { useEffect, useState } from 'preact/hooks'
 import { todayISO } from '../core/dates'
 import { db, sortedExercises } from '../core/store'
 import { ExerciseTab } from './ExerciseTab'
+import { Help } from './Help'
 import { Settings } from './Settings'
 
 /** Re-render on app foregrounding so "today" stays correct across midnight. */
@@ -27,7 +28,7 @@ export function App() {
   const [tab, setTab] = useState<string>(
     () => localStorage.getItem('ui.tab') ?? exercises[0]?.id ?? 'settings',
   )
-  const activeTab = tab === 'settings' || exercises.some((e) => e.id === tab)
+  const activeTab = tab === 'settings' || tab === 'help' || exercises.some((e) => e.id === tab)
     ? tab
     : (exercises[0]?.id ?? 'settings')
 
@@ -38,14 +39,14 @@ export function App() {
 
   const exercise = exercises.find((e) => e.id === activeTab)
 
-  // Settings is not a tab: it lives behind the fixed gear button top-right,
-  // which toggles back to the exercise that was open when it was pressed.
+  // Settings and Help are not tabs: they live behind the fixed buttons
+  // top-right, which toggle back to the exercise that was open.
   const [lastExercise, setLastExercise] = useState<string | null>(null)
-  const openSettings = () => {
+  const openPage = (page: 'settings' | 'help') => {
     if (exercise) setLastExercise(exercise.id)
-    selectTab('settings')
+    selectTab(page)
   }
-  const closeSettings = () => {
+  const closePage = () => {
     const target = lastExercise && exercises.some((e) => e.id === lastExercise)
       ? lastExercise
       : exercises[0]?.id
@@ -54,17 +55,25 @@ export function App() {
 
   return (
     <>
-      {exercises.length > 0 && (
-        <button
-          class="settings-btn"
-          aria-label={exercise ? 'Settings' : 'Close settings'}
-          onClick={exercise ? openSettings : closeSettings}
-        >
-          {exercise ? '⚙️' : '✕'}
-        </button>
-      )}
+      {exercises.length > 0 &&
+        (exercise ? (
+          <>
+            <button class="settings-btn help-btn" aria-label="Help" onClick={() => openPage('help')}>
+              ?
+            </button>
+            <button class="settings-btn" aria-label="Settings" onClick={() => openPage('settings')}>
+              ⚙️
+            </button>
+          </>
+        ) : (
+          <button class="settings-btn" aria-label="Close" onClick={closePage}>
+            ✕
+          </button>
+        ))}
       {exercise ? (
-        <ExerciseTab key={exercise.id} exercise={exercise} today={today} onOpenSettings={openSettings} />
+        <ExerciseTab key={exercise.id} exercise={exercise} today={today} onOpenSettings={() => openPage('settings')} />
+      ) : activeTab === 'help' ? (
+        <Help />
       ) : (
         <Settings onSelectExercise={selectTab} />
       )}
