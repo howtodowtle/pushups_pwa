@@ -47,7 +47,7 @@ export function ExerciseTab({
               today={today}
             />
           ) : (
-            <RestCard next={view.next} today={today} />
+            <RestCard next={view.next} today={today} completedToday={view.completedToday} />
           )}
 
           <div class="stats-row">

@@ -108,15 +108,25 @@ export function TodayCard({
   )
 }
 
-export function RestCard({ next, today }: { next: SessionView | null; today: string }) {
+export function RestCard({
+  next,
+  today,
+  completedToday,
+}: {
+  next: SessionView | null
+  today: string
+  /** A session was already logged today — celebrate it instead of claiming "rest day". */
+  completedToday?: boolean
+}) {
   return (
     <div class="card rest-card" data-size="sm">
       <section>
         {next ? (
           <>
-            <div class="big-emoji">🌤</div>
-            <strong>Rest day</strong>
+            <div class="big-emoji">{completedToday ? '💪' : '🌤'}</div>
+            <strong>{completedToday ? 'Session done — nice work!' : 'Rest day'}</strong>
             <p class="dim">
+              {completedToday && 'Recover well. '}
               Next: {formatDate(next.date, today)} — Week {next.week} · Session {next.index}
             </p>
           </>

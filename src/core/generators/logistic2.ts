@@ -1,3 +1,4 @@
+import { flooredMax } from '../stats'
 import type {
   CalibrationPoint,
   Generator,
@@ -44,6 +45,8 @@ import type {
  *   heavy set.
  *
  * Every session carries `predictedMax` so the UI can print and plot the curve.
+ * It is the true (float) curve value and drives all set math; display floors
+ * it via `flooredMax` — 11.9 reps is still only 11, never 12.
  *
  * The id keeps the historical `logistic-v2` name — ids are opaque and stable,
  * and this one shipped in the store migration before the curve became Gompertz.
@@ -90,7 +93,7 @@ function predictedMaxAt(
   for (const c of calibrations) {
     if (c.sessionIndex < n && c.sessionIndex >= anchorSession) {
       anchorSession = c.sessionIndex
-      anchorValue = clamp(Math.round(c.actual), 1, 500)
+      anchorValue = clamp(c.actual, 1, 500)
     }
   }
   if (anchorValue >= targetMax) return anchorValue
@@ -136,9 +139,10 @@ function pickTemplate(type: SessionType, dayInWeek: number): DayTemplate {
   return dayInWeek % 2 === 0 ? DAY_TEMPLATES.easyA : DAY_TEMPLATES.easyB
 }
 
-function buildSets(max: number, type: SessionType, dayInWeek: number): SetTemplate[] {
-  if (type === 'test') return [{ target: max, isMinimum: false }]
-  const base = max * (REDUCTION[type] ?? 1)
+function buildSets(trueMax: number, type: SessionType, dayInWeek: number): SetTemplate[] {
+  // A test's target is the prediction the user sees, so it uses the floored max.
+  if (type === 'test') return [{ target: flooredMax(trueMax), isMinimum: false }]
+  const base = trueMax * (REDUCTION[type] ?? 1)
   const tpl = pickTemplate(type, dayInWeek)
   return tpl.fractions.map((fraction, i) => ({
     target: Math.max(1, Math[tpl.rounding[i]](fraction * base)),
@@ -169,7 +173,7 @@ export const logisticV2: Generator = {
 
     return types.map((type, i) => {
       const n = i + 1
-      const max = Math.round(predictedMaxAt(n, startMax, targetMax, total, calibrations))
+      const max = predictedMaxAt(n, startMax, targetMax, total, calibrations)
       return { index: n, type, predictedMax: max, sets: buildSets(max, type, (i % perWeek) + 1) }
     })
   },
