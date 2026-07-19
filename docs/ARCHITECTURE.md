@@ -144,6 +144,9 @@ Moderate-volume successor (v1 prescribed 105–239% of the predicted max per
 session with single sets up to 105% — too much, too hard). Same test cadence
 and taper (×0.6) / recovery (×0.85) structure; what changed:
 
+- **The plan opens with a max test** (session 1, predicted = `startMax`):
+  measure the real max first, then train from it — logging it re-anchors the
+  curve immediately. A recovery session follows, as after any other test.
 - **Every session derives from that day's predicted max** and totals ~140–160%
   of it across 4 sets. The difficulty multiplier is gone.
 - **One heavier day per week** (first session): top set capped at 85% of
@@ -179,7 +182,7 @@ update re-renders everything; at this data size that's the simplest correct mode
 
 | File | Screen area |
 |---|---|
-| `App.tsx` | Tab bar (one tab per exercise + Settings), `useToday()` (re-renders on foregrounding / every minute so "today" survives midnight) |
+| `App.tsx` | Tab bar (one tab per exercise; Settings sits behind a fixed gear button top-right, not in the bar), `useToday()` (re-renders on foregrounding / every minute so "today" survives midnight) |
 | `ExerciseTab.tsx` | Composition: today card → stats → chart → schedule → history |
 | `TodayCard.tsx` | One-tap Done. Max tests and minimum sets prompt for actual numbers; "Adjust" opens all sets for editing |
 | `ScheduleList.tsx` | Upcoming sessions; tapping a row opens an inline editor that stores an override |

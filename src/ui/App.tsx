@@ -38,29 +38,50 @@ export function App() {
 
   const exercise = exercises.find((e) => e.id === activeTab)
 
+  // Settings is not a tab: it lives behind the fixed gear button top-right,
+  // which toggles back to the exercise that was open when it was pressed.
+  const [lastExercise, setLastExercise] = useState<string | null>(null)
+  const openSettings = () => {
+    if (exercise) setLastExercise(exercise.id)
+    selectTab('settings')
+  }
+  const closeSettings = () => {
+    const target = lastExercise && exercises.some((e) => e.id === lastExercise)
+      ? lastExercise
+      : exercises[0]?.id
+    if (target) selectTab(target)
+  }
+
   return (
     <>
+      {(exercise || exercises.length > 0) && (
+        <button
+          class="settings-btn"
+          aria-label={exercise ? 'Settings' : 'Close settings'}
+          onClick={exercise ? openSettings : closeSettings}
+        >
+          {exercise ? '⚙️' : '✕'}
+        </button>
+      )}
       {exercise ? (
-        <ExerciseTab key={exercise.id} exercise={exercise} today={today} onOpenSettings={() => selectTab('settings')} />
+        <ExerciseTab key={exercise.id} exercise={exercise} today={today} onOpenSettings={openSettings} />
       ) : (
         <Settings onSelectExercise={selectTab} />
       )}
-      <nav class="tabbar">
-        {exercises.map((e) => (
-          <button
-            key={e.id}
-            class={activeTab === e.id ? 'active' : ''}
-            onClick={() => selectTab(e.id)}
-          >
-            <span class="icon">{e.emoji}</span>
-            {e.name}
-          </button>
-        ))}
-        <button class={activeTab === 'settings' ? 'active' : ''} onClick={() => selectTab('settings')}>
-          <span class="icon">⚙️</span>
-          Settings
-        </button>
-      </nav>
+      {exercises.length > 0 && (
+        <nav class="tabbar">
+          {exercises.map((e) => (
+            <button
+              key={e.id}
+              class={activeTab === e.id ? 'active' : ''}
+              onClick={() => selectTab(e.id)}
+            >
+              <span class="icon">{e.emoji}</span>
+              {e.name}
+            </button>
+          ))}
+        </nav>
+      )}
     </>
   )
 }

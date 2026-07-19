@@ -31,13 +31,13 @@ export function HistoryList({
               <span class="sets-line" style={{ flex: 1 }}>
                 {actualsSummary(r.sets, unit)}
               </span>
-              {predictedMax?.has(`${r.planId}:${r.sessionIndex}`) && (
-                <span class="max-hint">max ~{predictedMax.get(`${r.planId}:${r.sessionIndex}`)}</span>
-              )}
               {r.sessionType !== 'normal' && (
                 <span class="badge" data-variant={badgeVariant(r.sessionType)}>
                   {TYPE_LABEL[r.sessionType]}
                 </span>
+              )}
+              {predictedMax?.has(`${r.planId}:${r.sessionIndex}`) && (
+                <span class="max-hint">max ~{predictedMax.get(`${r.planId}:${r.sessionIndex}`)}</span>
               )}
             </div>
           ))}

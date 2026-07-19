@@ -7,10 +7,16 @@ const P = { startMax: 10, targetMax: 100, weeks: 13, sessionsPerWeek: 3 }
 describe('logistic-v2 layout', () => {
   const plan = logisticV2.generate(P, [])
 
-  it('keeps the v1 session-type layout (tests, tapers, recoveries)', () => {
+  it('opens with a max test + recovery, then keeps the v1 layout', () => {
     const v1 = logisticV1.generate(P, [])
-    expect(plan.map((s) => s.type)).toEqual(v1.map((s) => s.type))
+    expect(plan[0].type).toBe('test')
+    expect(plan[1].type).toBe('recovery')
+    expect(plan.map((s) => s.type).slice(2)).toEqual(v1.map((s) => s.type).slice(2))
     expect(plan).toHaveLength(40)
+  })
+
+  it('the opening test is a single set at startMax', () => {
+    expect(plan[0].sets).toEqual([{ target: 10, isMinimum: false }])
   })
 
   it('tests are a single set at the predicted max', () => {
@@ -83,23 +89,33 @@ describe('logistic-v2 session volume', () => {
     }
   })
 
-  it('first session of the week is the heavy day; other days are the two easy waves', () => {
-    // Session 1: max 10 → heavy 20/85/20/20% → 2/8/2/2 (85% floor-rounded).
-    expect(plan[0].sets.map((s) => s.target)).toEqual([2, 8, 2, 2])
-    // Sessions 2 and 3 follow easy patterns A and B of their own predicted max.
+  it('first normal day of the week is the heavy day; other days are the two easy waves', () => {
+    // Week 1 is the opening max test + recovery, so the first heavy day is
+    // week 2, day 1 (session 4).
+    const heavy = plan[3]
+    expect(heavy.type).toBe('normal')
+    const m = heavy.predictedMax!
+    expect(heavy.sets.map((s) => s.target)).toEqual([
+      Math.max(1, Math.round(0.2 * m)),
+      Math.max(1, Math.floor(0.85 * m)),
+      Math.max(1, Math.round(0.2 * m)),
+      Math.max(1, Math.round(0.2 * m)),
+    ])
+    // Sessions 5 and 6 follow easy patterns A and B of their own predicted max.
     const easyA = [0.4, 0.45, 0.4, 0.35]
     const easyB = [0.35, 0.4, 0.45, 0.35]
-    expect(plan[1].sets.map((s) => s.target)).toEqual(
-      easyA.map((f) => Math.max(1, Math.round(f * plan[1].predictedMax!))),
+    expect(plan[4].sets.map((s) => s.target)).toEqual(
+      easyA.map((f) => Math.max(1, Math.round(f * plan[4].predictedMax!))),
     )
-    expect(plan[2].sets.map((s) => s.target)).toEqual(
-      easyB.map((f) => Math.max(1, Math.round(f * plan[2].predictedMax!))),
+    expect(plan[5].sets.map((s) => s.target)).toEqual(
+      easyB.map((f) => Math.max(1, Math.round(f * plan[5].predictedMax!))),
     )
   })
 
   it('heavy day at a clean max is exact: 100 → 20/85/20/20', () => {
-    const big = logisticV2.generate({ ...P, startMax: 100, targetMax: 200 }, [])
-    expect(big[0].sets.map((s) => s.target)).toEqual([20, 85, 20, 20])
+    // Flat curve (start = target = 100) so the heavy day sits at a clean max.
+    const big = logisticV2.generate({ ...P, startMax: 100, targetMax: 100 }, [])
+    expect(big[3].sets.map((s) => s.target)).toEqual([20, 85, 20, 20])
   })
 
   it('taper and recovery days scale the easy shape down and never go heavy', () => {
@@ -118,6 +134,17 @@ describe('logistic-v2 session volume', () => {
 
 describe('logistic-v2 calibration (re-anchor)', () => {
   const uncal = logisticV2.generate(P, [])
+
+  it('logging the opening max test re-anchors the whole curve', () => {
+    const cal = logisticV2.generate(P, [{ sessionIndex: 1, actual: 20 }])
+    // The test itself keeps its prediction; everything after rides the new curve.
+    expect(cal[0]).toEqual(uncal[0])
+    expect(cal[1].predictedMax).toBeGreaterThanOrEqual(20)
+    for (let i = 1; i < 40; i++) {
+      expect(cal[i].predictedMax!).toBeGreaterThanOrEqual(uncal[i].predictedMax!)
+    }
+    expect(cal[39].predictedMax).toBe(100)
+  })
 
   it('leaves sessions up to and including the test untouched', () => {
     const cal = logisticV2.generate(P, [{ sessionIndex: 12, actual: 15 }])

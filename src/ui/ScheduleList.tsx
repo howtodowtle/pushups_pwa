@@ -44,7 +44,6 @@ export function ScheduleList({
                 <span class="sets-line" style={{ flex: 1 }}>
                   {setsSummary(s.sets, exercise.unit)}
                 </span>
-                {s.predictedMax != null && <span class="max-hint">max ~{s.predictedMax}</span>}
                 {s.type !== 'normal' && (
                   <span class="badge" data-variant={badgeVariant(s.type)}>
                     {TYPE_LABEL[s.type]}
@@ -55,6 +54,7 @@ export function ScheduleList({
                     edited
                   </span>
                 )}
+                {s.predictedMax != null && <span class="max-hint">max ~{s.predictedMax}</span>}
                 <span class="chev">›</span>
               </button>
             ),

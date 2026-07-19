@@ -35,8 +35,13 @@ import type {
  *   the fresh weeks right after a test + recovery and eases as the next test
  *   approaches — a built-in mini-taper. (A symmetric curve would restart slow
  *   after every test and shove the steepness ever later.)
- * - Test cadence, taper (×0.6) and recovery (×0.85) days are unchanged from
- *   v1; taper/recovery always use the easy shape, never the heavy set.
+ * - The plan **opens with a max test** (session 1, predicted = startMax):
+ *   measure the real max first, then train from it — logging it re-anchors
+ *   the whole curve immediately. A recovery session follows, as after any
+ *   other test.
+ * - Mid-plan test cadence, taper (×0.6) and recovery (×0.85) days are
+ *   unchanged from v1; taper/recovery always use the easy shape, never the
+ *   heavy set.
  *
  * Every session carries `predictedMax` so the UI can print and plot the curve.
  *
@@ -103,9 +108,9 @@ function predictedMaxAt(
   return anchorValue + (targetMax - anchorValue) * progress
 }
 
-// Same layout as logistic-v1: final test + taper before it, mid-plan tests at
-// the end of every 3rd week from week 4 while ≥3 weeks remain, each flanked by
-// a taper and a recovery session.
+// The v1 layout (final test + taper before it, mid-plan tests at the end of
+// every 3rd week from week 4 while ≥3 weeks remain, each flanked by a taper
+// and a recovery session) plus an opening max test as session 1.
 function sessionTypes(weeks: number, perWeek: number): SessionType[] {
   const total = weeks * perWeek + 1
   const types: SessionType[] = new Array(total).fill('normal')
@@ -117,6 +122,10 @@ function sessionTypes(weeks: number, perWeek: number): SessionType[] {
     if (testIdx >= 1 && types[testIdx - 1] === 'normal') types[testIdx - 1] = 'taper'
     if (types[testIdx + 1] === 'normal') types[testIdx + 1] = 'recovery'
   }
+  // Opening max test: measure the real max before training from it. Recovery
+  // follows like after any other test (a taper there outranks it on tiny plans).
+  types[0] = 'test'
+  if (types[1] === 'normal') types[1] = 'recovery'
   return types
 }
 
@@ -141,8 +150,9 @@ export const logisticV2: Generator = {
   id: 'logistic-v2',
   name: 'Gompertz progression',
   description:
-    'Four submaximal sets per session (~150% of predicted max total), one heavier ' +
-    'day per week capped at 85%. Max test every 3 weeks re-anchors the curve.',
+    'Opens with a max test, then four submaximal sets per session (~150% of predicted ' +
+    'max total), one heavier day per week capped at 85%. Max test every 3 weeks ' +
+    're-anchors the curve.',
   paramFields: [
     { key: 'startMax', label: 'Current max', min: 1, max: 500, step: 1, defaultValue: 10 },
     { key: 'targetMax', label: 'Target max', min: 1, max: 500, step: 1, defaultValue: 100 },
