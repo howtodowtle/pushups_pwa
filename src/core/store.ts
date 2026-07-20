@@ -1,6 +1,6 @@
 import { signal } from '@preact/signals'
 import { todayISO } from './dates'
-import { derivePlanView, fitProgress } from './derive'
+import { derivePlanView, effectiveSession, fitProgress } from './derive'
 import type {
   AppData,
   Exercise,
@@ -209,62 +209,73 @@ export function clearOverride(planId: string, sessionIndex: number): void {
 
 // ---- logging ----
 
+const toResultSets = (sets: SetTemplate[], actuals: number[]): ResultSet[] =>
+  sets.map((s, i) => ({ target: s.target, isMinimum: s.isMinimum, actual: actuals[i] }))
+
+/** Stored per-set progress of a session, fitted to the given set count. */
+const progressOf = (p: Plan, sessionIndex: number, count: number): (number | null)[] =>
+  fitProgress(p.progress?.sessionIndex === sessionIndex ? p.progress.actuals : [], count)
+
 /** Writes the immutable Result, folds test results into calibrations, and
  * clears any per-set progress the session accumulated during the day. */
 function commitResult(
   d: AppData,
-  planId: string,
+  p: Plan,
   sessionIndex: number,
   sessionType: SessionType,
   sets: ResultSet[],
   date: string,
 ): void {
-  d.results.push({ id: uid(), planId, sessionIndex, date, sessionType, sets })
-  const p = d.plans.find((x) => x.id === planId)
-  if (!p) return
+  d.results.push({ id: uid(), planId: p.id, sessionIndex, date, sessionType, sets })
   // A test's single-set actual becomes the calibration point that bends
   // the rest of the curve.
   if (sessionType === 'test') p.calibrations.push({ sessionIndex, actual: sets[0]?.actual ?? 0 })
   if (p.progress?.sessionIndex === sessionIndex) delete p.progress
 }
 
-export function logSession(
+/** Logs the whole session in one go. `actuals` (aligned with the session's
+ * sets) wins when given; otherwise each set falls back to its checked-off
+ * progress, then to the planned target. */
+export function completeSession(
   planId: string,
   sessionIndex: number,
-  sessionType: SessionType,
-  sets: ResultSet[],
-  date: string = todayISO(),
-): void {
-  update((d) => commitResult(d, planId, sessionIndex, sessionType, sets, date))
-}
-
-/** Checks off a single set of the due session — sets can land one at a time
- * through the day. When the last one lands, the session finalizes into a
- * Result exactly as a one-tap log would. */
-export function logSet(
-  planId: string,
-  sessionIndex: number,
-  sessionType: SessionType,
-  sets: SetTemplate[],
-  setIndex: number,
-  actual: number,
+  actuals?: number[],
   date: string = todayISO(),
 ): void {
   update((d) => {
     const p = d.plans.find((x) => x.id === planId)
-    if (!p) return
-    const actuals = fitProgress(
-      p.progress?.sessionIndex === sessionIndex ? p.progress.actuals : [],
-      sets.length,
-    )
-    actuals[setIndex] = actual
+    const session = p && effectiveSession(p, sessionIndex)
+    if (!p || !session) return
+    const progress = progressOf(p, sessionIndex, session.sets.length)
+    const filled = session.sets.map((s, i) => actuals?.[i] ?? progress[i] ?? s.target)
+    commitResult(d, p, sessionIndex, session.type, toResultSets(session.sets, filled), date)
+  })
+}
+
+/** Checks off a single set of the due session — sets can land one at a time
+ * through the day. `actual` defaults to the set's planned target. When the
+ * last set lands, the session finalizes into a Result exactly as a one-go
+ * log would. */
+export function logSet(
+  planId: string,
+  sessionIndex: number,
+  setIndex: number,
+  actual?: number,
+  date: string = todayISO(),
+): void {
+  update((d) => {
+    const p = d.plans.find((x) => x.id === planId)
+    const session = p && effectiveSession(p, sessionIndex)
+    if (!p || !session || !session.sets[setIndex]) return
+    const actuals = progressOf(p, sessionIndex, session.sets.length)
+    actuals[setIndex] = actual ?? session.sets[setIndex].target
     if (actuals.every((a) => a != null)) {
       commitResult(
         d,
-        planId,
+        p,
         sessionIndex,
-        sessionType,
-        sets.map((s, i) => ({ target: s.target, isMinimum: s.isMinimum, actual: actuals[i] as number })),
+        session.type,
+        toResultSets(session.sets, actuals as number[]),
         date,
       )
     } else {

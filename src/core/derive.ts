@@ -33,6 +33,20 @@ export function fitProgress(
   return Array.from({ length: count }, (_, i) => actuals[i] ?? null)
 }
 
+/** Effective (type, sets) of a single session — generator output ⊕ override.
+ * Point lookup for store mutations, so logging derives the session from the
+ * plan's own inputs instead of trusting a UI render-time snapshot. */
+export function effectiveSession(
+  plan: Plan,
+  sessionIndex: number,
+): { type: SessionType; sets: SetTemplate[] } | null {
+  const t = getGenerator(plan.generatorId)
+    .generate(plan.params, plan.calibrations)
+    .find((x) => x.index === sessionIndex)
+  if (!t) return null
+  return { type: t.type, sets: plan.overrides[sessionIndex]?.sets ?? t.sets }
+}
+
 export interface PlanView {
   plan: Plan
   sessions: SessionView[]

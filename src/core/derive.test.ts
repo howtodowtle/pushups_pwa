@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { derivePlanView, fitProgress } from './derive'
+import { derivePlanView, effectiveSession, fitProgress } from './derive'
 import type { Plan, Result } from './types'
 
 const plan: Plan = {
@@ -83,6 +83,19 @@ describe('derivePlanView', () => {
     const view = derivePlanView(changed, done, '2026-07-23')
     expect(view.sessions[0].result).toBe(done[0])
     expect(view.completedCount).toBe(2)
+  })
+})
+
+describe('effectiveSession', () => {
+  it('matches derivePlanView, applies overrides, null for unknown index', () => {
+    const s2 = derivePlanView(plan, [], '2026-07-20').sessions[1]
+    expect(effectiveSession(plan, 2)).toEqual({ type: s2.type, sets: s2.sets })
+    const edited: Plan = {
+      ...plan,
+      overrides: { 2: { sets: [{ target: 99, isMinimum: false }] } },
+    }
+    expect(effectiveSession(edited, 2)?.sets).toEqual([{ target: 99, isMinimum: false }])
+    expect(effectiveSession(plan, 999)).toBeNull()
   })
 })
 

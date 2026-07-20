@@ -1,8 +1,8 @@
 import { Check } from 'lucide-preact'
 import { useState } from 'preact/hooks'
-import type { SessionView } from '../core/derive'
-import { logSession, logSet, undoSet } from '../core/store'
-import type { Exercise, ResultSet } from '../core/types'
+import { fitProgress, type SessionView } from '../core/derive'
+import { completeSession, logSet, undoSet } from '../core/store'
+import type { Exercise } from '../core/types'
 import { formatDate, SessionBadges, unitSuffix } from './format'
 
 /**
@@ -32,9 +32,10 @@ export function TodayCard({
   today: string
 }) {
   const [mode, setMode] = useState<Mode>({ kind: 'view' })
-  const [values, setValues] = useState<number[]>(() => session.sets.map((s) => s.target))
+  // Only read in entry/edit modes; enter() seeds it on every transition.
+  const [values, setValues] = useState<number[]>([])
 
-  const progress = session.progress ?? session.sets.map(() => null)
+  const progress = fitProgress(session.progress ?? [], session.sets.length)
   const doneCount = progress.filter((a) => a != null).length
   const remaining = session.sets.length - doneCount
   const isTest = session.type === 'test'
@@ -42,12 +43,15 @@ export function TodayCard({
   const sfx = unitSuffix(exercise.unit)
   /** Sets whose actual can't be assumed: max tests and minimum sets. */
   const needsCount = (i: number) => isTest || session.sets[i].isMinimum
+  /** Not done yet and needs a real number before the session can complete. */
+  const needsEntry = (i: number) => progress[i] == null && needsCount(i)
   const showsInput = (i: number) =>
     (mode.kind === 'entry' && mode.set === i) ||
-    (mode.kind === 'edit' && (mode.scope === 'all' || (progress[i] == null && needsCount(i))))
+    (mode.kind === 'edit' && (mode.scope === 'all' || needsEntry(i)))
 
-  /** Mode transitions re-seed the inputs: logged actual where a set is done,
-   * planned target otherwise. */
+  /** Mode transitions seed the inputs: logged actual where a set is done,
+   * planned target otherwise — so saving unedited inputs logs exactly what
+   * the chips showed. */
   const enter = (next: Mode) => {
     setValues(session.sets.map((s, i) => progress[i] ?? s.target))
     setMode(next)
@@ -56,61 +60,44 @@ export function TodayCard({
   const tapSet = (i: number) => {
     if (progress[i] != null) undoSet(planId, session.index, i)
     else if (needsCount(i)) enter({ kind: 'entry', set: i })
-    else logSet(planId, session.index, session.type, session.sets, i, session.sets[i].target, today)
-  }
-
-  const saveSession = (actuals: number[]) => {
-    const sets: ResultSet[] = session.sets.map((s, i) => ({
-      target: s.target,
-      isMinimum: s.isMinimum,
-      actual: actuals[i],
-    }))
-    logSession(planId, session.index, session.type, sets, today)
+    else logSet(planId, session.index, i, undefined, today)
   }
 
   const onPrimary = () => {
     if (mode.kind === 'entry') {
-      logSet(planId, session.index, session.type, session.sets, mode.set, values[mode.set], today)
+      logSet(planId, session.index, mode.set, values[mode.set], today)
       setMode({ kind: 'view' })
     } else if (mode.kind === 'edit') {
-      if (mode.scope === 'all') saveSession(values)
-      else saveSession(session.sets.map((s, i) => progress[i] ?? (needsCount(i) ? values[i] : s.target)))
-    } else if (session.sets.some((_, i) => progress[i] == null && needsCount(i))) {
+      completeSession(planId, session.index, values, today)
+    } else if (session.sets.some((_, i) => needsEntry(i))) {
       enter({ kind: 'edit', scope: 'required' })
     } else {
-      saveSession(session.sets.map((s, i) => progress[i] ?? s.target))
+      completeSession(planId, session.index, undefined, today)
     }
   }
 
-  const primaryLabel =
-    mode.kind === 'entry'
-      ? 'Log set'
-      : mode.kind === 'edit'
-        ? 'Save'
-        : doneCount === 0
-          ? isTest
-            ? 'Enter result'
-            : 'Log all sets'
-          : remaining === 0
-            ? 'Log session'
-            : remaining === 1
-              ? 'Log last set'
-              : `Log remaining ${remaining} sets`
+  const primaryLabel = (): string => {
+    if (mode.kind === 'entry') return 'Log set'
+    if (mode.kind === 'edit') return 'Save'
+    if (doneCount === 0) return isTest ? 'Enter result' : 'Log all sets'
+    // remaining can hit 0 without a Result when an override shrank the set
+    // count under existing check-offs — still needs an explicit log.
+    if (remaining === 0) return 'Log session'
+    return remaining === 1 ? 'Log last set' : `Log remaining ${remaining} sets`
+  }
 
-  const hint =
-    mode.kind === 'entry'
-      ? isTest
-        ? 'How many did you get?'
-        : `At least ${session.sets[mode.set].target}${sfx} — how many did you get?`
-      : mode.kind === 'edit'
-        ? isTest
-          ? 'How many did you get?'
-          : 'Enter what you actually did.'
-        : isTest
-          ? null
-          : doneCount === 0
-            ? 'Tap each set as you do it — or log them all at once below.'
-            : `${doneCount} of ${session.sets.length} sets done. Tap a set to undo.`
+  const hint = (): string | null => {
+    if (mode.kind !== 'view') {
+      if (isTest) return 'How many did you get?'
+      return mode.kind === 'entry'
+        ? `At least ${session.sets[mode.set].target}${sfx} — how many did you get?`
+        : 'Enter what you actually did.'
+    }
+    if (isTest) return null
+    if (doneCount === 0) return 'Tap each set as you do it — or log them all at once below.'
+    return `${doneCount} of ${session.sets.length} sets done. Tap a set to undo.`
+  }
+  const hintText = hint()
 
   const overdue = session.date < today
 
@@ -173,9 +160,9 @@ export function TodayCard({
           )
         })}
       </div>
-      {hint && <p class="dim set-hint">{hint}</p>}
+      {hintText && <p class="dim set-hint">{hintText}</p>}
       <button class="btn block" onClick={onPrimary}>
-        {primaryLabel}
+        {primaryLabel()}
       </button>
       {mode.kind === 'view' ? (
         <button
