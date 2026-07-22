@@ -1,9 +1,9 @@
 import { Check } from 'lucide-preact'
 import { useState } from 'preact/hooks'
 import { fitProgress, type SessionView } from '../core/derive'
-import { completeSession, logSet, undoSet } from '../core/store'
+import { completeSession, logSet, setOverride, undoSet } from '../core/store'
 import type { Exercise } from '../core/types'
-import { formatDate, SessionBadges, unitSuffix } from './format'
+import { formatDate, SessionBadges, setLabel, unitSuffix } from './format'
 
 /**
  * Per-set logging: tap a set the moment you've done it — one in the morning,
@@ -39,6 +39,8 @@ export function TodayCard({
   const doneCount = progress.filter((a) => a != null).length
   const remaining = session.sets.length - doneCount
   const isTest = session.type === 'test'
+  /** "Adjust reps": editing today's targets, not logging what was done. */
+  const editingTargets = mode.kind === 'edit' && mode.scope === 'all'
 
   const sfx = unitSuffix(exercise.unit)
   /** Sets whose actual can't be assumed: max tests and minimum sets. */
@@ -49,11 +51,13 @@ export function TodayCard({
     (mode.kind === 'entry' && mode.set === i) ||
     (mode.kind === 'edit' && (mode.scope === 'all' || needsEntry(i)))
 
-  /** Mode transitions seed the inputs: logged actual where a set is done,
-   * planned target otherwise — so saving unedited inputs logs exactly what
-   * the chips showed. */
+  /** Mode transitions seed the inputs. "Adjust reps" (edit-all) edits the
+   * planned targets, so it seeds from targets. Logging modes seed from the
+   * logged actual where a set is done, planned target otherwise — so saving
+   * unedited inputs logs exactly what the chips showed. */
   const enter = (next: Mode) => {
-    setValues(session.sets.map((s, i) => progress[i] ?? s.target))
+    const editingTargets = next.kind === 'edit' && next.scope === 'all'
+    setValues(session.sets.map((s, i) => (editingTargets ? s.target : progress[i] ?? s.target)))
     setMode(next)
   }
 
@@ -66,6 +70,14 @@ export function TodayCard({
   const onPrimary = () => {
     if (mode.kind === 'entry') {
       logSet(planId, session.index, mode.set, values[mode.set], today)
+      setMode({ kind: 'view' })
+    } else if (editingTargets) {
+      // "Adjust reps": store an override of the targets — no set gets logged.
+      setOverride(
+        planId,
+        session.index,
+        session.sets.map((s, i) => ({ target: Math.max(1, values[i] || 1), isMinimum: s.isMinimum })),
+      )
       setMode({ kind: 'view' })
     } else if (mode.kind === 'edit') {
       completeSession(planId, session.index, values, today)
@@ -88,6 +100,7 @@ export function TodayCard({
 
   const hint = (): string | null => {
     if (mode.kind !== 'view') {
+      if (editingTargets) return 'Adjust the target numbers — saved without logging the session.'
       if (isTest) return 'How many did you get?'
       return mode.kind === 'entry'
         ? `At least ${session.sets[mode.set].target}${sfx} — how many did you get?`
@@ -119,7 +132,7 @@ export function TodayCard({
       <div class="set-grid">
         {session.sets.map((s, i) => {
           const done = progress[i] != null
-          const label = s.isMinimum ? 'min' : isTest ? 'max' : `set ${i + 1}`
+          const label = setLabel(s, i, isTest)
           return showsInput(i) ? (
             <div class="set-chip" key={i}>
               <input
