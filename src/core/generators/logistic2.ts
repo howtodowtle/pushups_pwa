@@ -87,11 +87,10 @@ function predictedMaxAt(
   totalSessions: number,
   calibrations: CalibrationPoint[],
 ): number {
-  // Anchor: the latest test at or before session n. Re-anchoring reaches the
-  // present, not just the future — a test's own day snaps to the measured
-  // result (progress is 0 at the anchor, so the curve passes through it), so a
-  // 54 test never leaves that day predicting 60. Sessions strictly before the
-  // test keep the curve they were generated from; only today and forward move.
+  // Anchor: the latest test at or before session n. The test's own day snaps to
+  // its result (progress is 0 at the anchor, so the curve passes through it);
+  // sessions strictly before it keep their original curve — re-anchoring reaches
+  // the present and forward, never the past.
   let anchorSession = 1
   let anchorValue = startMax
   for (const c of calibrations) {
