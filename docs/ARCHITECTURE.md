@@ -47,6 +47,7 @@ Concrete consequences:
 | Edit a future day's sets | an override on the plan | that day shows your numbers, survives everything below |
 | Edit plan params mid-plan | new `params` | future re-derives from new params; past untouched |
 | Skip a few days | nothing | remaining schedule slides forward (computed, not stored) |
+| Leave a session part-done overnight | its `progress` finalizes into a `Result` on next open | done sets keep their reps, missed sets record 0, the plan advances — a partial day still counts as trained |
 
 ## Data model (`src/core/types.ts`)
 
@@ -56,9 +57,10 @@ Plan              exerciseId + generatorId + params + startDate
                   + status ('active' | 'archived')
                   + calibrations: [{ sessionIndex, actual }]
                   + overrides: { [sessionIndex]: { sets } }
-                  + progress?: { sessionIndex, actuals: (number|null)[] }
+                  + progress?: { sessionIndex, actuals: (number|null)[], startedOn? }
                     — per-set check-offs of the due session; becomes a
-                    Result (and is cleared) when the last set is logged
+                    Result (and is cleared) when the last set is logged,
+                    or auto-closes once its day (startedOn) has passed
 Result            completion snapshot (actuals editable for 24h, then frozen):
                   planId + sessionIndex + date + sessionType + completedAt
                   + sets: [{ target, isMinimum, actual }]
@@ -100,6 +102,15 @@ store.ts  ──(AppData signal)──►  derive.ts  ──(PlanView)──► 
 Session state machine (in `derive.ts`): a session is `done` (has a Result),
 `due` (the **first** incomplete session, date ≤ today — logging is strictly
 sequential, so at most one session is ever due), or `upcoming`.
+
+A partial session — some sets checked off, but the day ended before the rest —
+auto-closes on the next app open or midnight rollover: `finalizeStalePartials`
+(`store.ts`) commits `partialToClose` (`derive.ts`) as a Result dated to the
+workout day, with the missed sets at 0, and the plan advances as if fully done.
+A session with *no* sets done is skipped, not partial: nothing is stored and it
+rolls forward as before. A test whose measuring set was never attempted closes
+without writing a calibration point, so a missed test can't bend the curve to 0.
+There is no backend, so "end of day" can only happen on next render.
 
 ## Generators (`src/core/generators/`)
 

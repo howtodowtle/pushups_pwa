@@ -22,7 +22,8 @@ export function Help() {
         at once. Tapping a checked set undoes it; the session completes when the last set is
         logged. Sets marked <strong>min</strong> and test sessions ask what you actually got —
         test results recalibrate the rest of the plan. Missed a day? The schedule shifts
-        forward.
+        forward. Started a session but didn't finish? It closes overnight with the sets you
+        did — the rest count as 0 — and the plan moves on.
       </p>
 
       <h2>Make it yours</h2>

@@ -1,6 +1,6 @@
 import { getGenerator } from './generators'
 import { baseDates, perWeekOf, shiftedDates, weekOf } from './schedule'
-import type { CalibrationPoint, Plan, Result, SessionType, SetTemplate } from './types'
+import type { CalibrationPoint, Plan, Result, SessionProgress, SessionType, SetTemplate } from './types'
 
 /**
  * Combines generator output + overrides + results + today into what the UI
@@ -45,6 +45,45 @@ export function effectiveSession(
     .find((x) => x.index === sessionIndex)
   if (!t) return null
   return { type: t.type, sets: plan.overrides[sessionIndex]?.sets ?? t.sets }
+}
+
+/** Check-offs whose calendar day has ended — the one definition of "stale". */
+export const isStalePartial = (progress: SessionProgress | undefined, today: string): boolean =>
+  progress?.startedOn != null && progress.startedOn < today
+
+/**
+ * What a stale partial should close into: the session's effective sets and
+ * the fitted per-set actuals (null = never attempted), dated to the day the
+ * reps happened. A partial is a session that *was* trained — just with fewer
+ * reps — so it commits as done and the plan advances; `commitResult` records
+ * the nulls as 0 and skips a test's calibration when its measuring set is
+ * null. Returns null when there is nothing to close: not a stale partial, no
+ * set done at all (a skipped session rolls forward instead), or a session
+ * index the generator no longer produces.
+ */
+export function partialToClose(
+  plan: Plan,
+  today: string,
+): {
+  sessionIndex: number
+  sessionType: SessionType
+  sets: SetTemplate[]
+  actuals: (number | null)[]
+  date: string
+} | null {
+  const progress = plan.progress
+  if (!progress?.startedOn || !isStalePartial(progress, today)) return null
+  const session = effectiveSession(plan, progress.sessionIndex)
+  if (!session) return null
+  const actuals = fitProgress(progress.actuals, session.sets.length)
+  if (!actuals.some((a) => a != null)) return null
+  return {
+    sessionIndex: progress.sessionIndex,
+    sessionType: session.type,
+    sets: session.sets,
+    actuals,
+    date: progress.startedOn,
+  }
 }
 
 export interface PlanView {

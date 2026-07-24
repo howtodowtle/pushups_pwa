@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { derivePlanView, effectiveSession, fitProgress, isResultEditable } from './derive'
+import { derivePlanView, effectiveSession, fitProgress, isResultEditable, partialToClose } from './derive'
 import type { Plan, Result } from './types'
 
 const plan: Plan = {
@@ -96,6 +96,79 @@ describe('effectiveSession', () => {
     }
     expect(effectiveSession(edited, 2)?.sets).toEqual([{ target: 99, isMinimum: false }])
     expect(effectiveSession(plan, 999)).toBeNull()
+  })
+})
+
+describe('partialToClose', () => {
+  // Pin session 1's sets so the expectations don't depend on generator math.
+  const sets = [
+    { target: 5, isMinimum: false },
+    { target: 6, isMinimum: false },
+    { target: 7, isMinimum: false },
+    { target: 8, isMinimum: true },
+  ]
+  const partial = (overrides: Partial<Plan> = {}): Plan => ({
+    ...plan,
+    overrides: { 1: { sets } },
+    progress: { sessionIndex: 1, actuals: [10, 6, null, null], startedOn: '2026-07-20' },
+    ...overrides,
+  })
+
+  it('closes a past-day partial: done sets keep their reps, missed sets stay null', () => {
+    const close = partialToClose(partial(), '2026-07-21')
+    expect(close).toEqual({
+      sessionIndex: 1,
+      sessionType: 'normal',
+      sets,
+      actuals: [10, 6, null, null], // null = never attempted; commit records 0
+      date: '2026-07-20', // the day the reps happened, not the sweep day
+    })
+  })
+
+  it('returns null while the partial is still on its own day', () => {
+    expect(partialToClose(partial(), '2026-07-20')).toBeNull()
+  })
+
+  it('returns null without progress or without a date stamp', () => {
+    expect(partialToClose(plan, '2026-07-21')).toBeNull()
+    const unstamped = partial({ progress: { sessionIndex: 1, actuals: [10, null, null, null] } })
+    expect(partialToClose(unstamped, '2026-07-21')).toBeNull()
+  })
+
+  it('returns null when no set was done at all — skipped, not partial', () => {
+    const skipped = partial({
+      progress: { sessionIndex: 1, actuals: [null, null, null, null], startedOn: '2026-07-20' },
+    })
+    expect(partialToClose(skipped, '2026-07-21')).toBeNull()
+  })
+
+  it('returns null for a session index the generator no longer produces', () => {
+    const gone = partial({
+      progress: { sessionIndex: 999, actuals: [10], startedOn: '2026-07-20' },
+    })
+    expect(partialToClose(gone, '2026-07-21')).toBeNull()
+  })
+
+  it('keeps the done measuring set of a test — commit calibrates from it', () => {
+    // Session 12 is the first mid-plan max test (13w × 3/wk).
+    const test = partial({
+      overrides: {},
+      progress: { sessionIndex: 12, actuals: [17], startedOn: '2026-07-20' },
+    })
+    const close = partialToClose(test, '2026-07-21')
+    expect(close?.sessionType).toBe('test')
+    expect(close?.actuals).toEqual([17])
+  })
+
+  it('keeps an unattempted measuring set null — commit skips calibration', () => {
+    // An override added a warm-up set to the test day; only that one was done.
+    const test = partial({
+      overrides: { 12: { sets: [{ target: 17, isMinimum: false }, { target: 5, isMinimum: false }] } },
+      progress: { sessionIndex: 12, actuals: [null, 5], startedOn: '2026-07-20' },
+    })
+    const close = partialToClose(test, '2026-07-21')
+    expect(close?.sessionType).toBe('test')
+    expect(close?.actuals).toEqual([null, 5])
   })
 })
 
