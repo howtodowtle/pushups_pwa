@@ -1,6 +1,6 @@
 import { getGenerator } from './generators'
 import { baseDates, perWeekOf, shiftedDates, weekOf } from './schedule'
-import type { CalibrationPoint, Plan, Result, ResultSet, SessionType, SetTemplate } from './types'
+import type { CalibrationPoint, Plan, Result, SessionProgress, SessionType, SetTemplate } from './types'
 
 /**
  * Combines generator output + overrides + results + today into what the UI
@@ -47,16 +47,19 @@ export function effectiveSession(
   return { type: t.type, sets: plan.overrides[sessionIndex]?.sets ?? t.sets }
 }
 
+/** Check-offs whose calendar day has ended — the one definition of "stale". */
+export const isStalePartial = (progress: SessionProgress | undefined, today: string): boolean =>
+  progress?.startedOn != null && progress.startedOn < today
+
 /**
- * The Result a partial session from a past day should close into: done sets
- * keep the reps actually done, un-done sets record 0, dated to the day the
+ * What a stale partial should close into: the session's effective sets and
+ * the fitted per-set actuals (null = never attempted), dated to the day the
  * reps happened. A partial is a session that *was* trained — just with fewer
- * reps — so the plan advances as if it were fully done. `calibrate` is false
- * when a test's calibrating set (set 0) was never actually attempted, so a
- * non-attempt can't fold a 0 into the curve. Returns null when there is
- * nothing to close: no progress, no date stamp yet, still today, no set done
- * at all (a skipped session rolls forward instead), or a session index the
- * generator no longer produces.
+ * reps — so it commits as done and the plan advances; `commitResult` records
+ * the nulls as 0 and skips a test's calibration when its measuring set is
+ * null. Returns null when there is nothing to close: not a stale partial, no
+ * set done at all (a skipped session rolls forward instead), or a session
+ * index the generator no longer produces.
  */
 export function partialToClose(
   plan: Plan,
@@ -64,12 +67,12 @@ export function partialToClose(
 ): {
   sessionIndex: number
   sessionType: SessionType
-  sets: ResultSet[]
+  sets: SetTemplate[]
+  actuals: (number | null)[]
   date: string
-  calibrate: boolean
 } | null {
   const progress = plan.progress
-  if (!progress?.startedOn || progress.startedOn >= today) return null
+  if (!progress?.startedOn || !isStalePartial(progress, today)) return null
   const session = effectiveSession(plan, progress.sessionIndex)
   if (!session) return null
   const actuals = fitProgress(progress.actuals, session.sets.length)
@@ -77,13 +80,9 @@ export function partialToClose(
   return {
     sessionIndex: progress.sessionIndex,
     sessionType: session.type,
-    sets: session.sets.map((s, i) => ({
-      target: s.target,
-      isMinimum: s.isMinimum,
-      actual: actuals[i] ?? 0,
-    })),
+    sets: session.sets,
+    actuals,
     date: progress.startedOn,
-    calibrate: session.type !== 'test' || actuals[0] != null,
   }
 }
 

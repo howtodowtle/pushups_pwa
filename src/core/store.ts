@@ -1,6 +1,6 @@
 import { signal } from '@preact/signals'
 import { todayISO } from './dates'
-import { derivePlanView, effectiveSession, fitProgress, isResultEditable, partialToClose } from './derive'
+import { derivePlanView, effectiveSession, fitProgress, isResultEditable, isStalePartial, partialToClose } from './derive'
 import type {
   AppData,
   Exercise,
@@ -51,10 +51,16 @@ function isAppData(value: unknown): value is AppData {
  * - Active logistic-v1 plans move to logistic-v2 — the owner wants running
  *   plans on the improved math. Archived plans keep v1 so their history
  *   derives exactly as it was generated.
+ * - Archived plans drop leftover per-set progress (`archive` clears it now;
+ *   this catches data from before it did).
+ * - Progress written before `startedOn` existed claims today, so it
+ *   auto-closes once the day passes.
  */
 function migrate(d: AppData): AppData {
   for (const p of d.plans) {
     if (p.status === 'active' && p.generatorId === 'logistic-v1') p.generatorId = 'logistic-v2'
+    if (p.status !== 'active') delete p.progress
+    else if (p.progress) p.progress.startedOn ??= todayISO()
   }
   return d
 }
@@ -141,6 +147,8 @@ export function dueExerciseCount(d: AppData, today: string): number {
 function archive(p: Plan): void {
   p.status = 'archived'
   p.stoppedAt = nowISO()
+  // In-day check-offs die with the plan — nothing can ever commit them.
+  delete p.progress
 }
 
 export function createPlan(
@@ -222,21 +230,25 @@ const testCalibrationActual = (sets: ResultSet[]): number => sets[0]?.actual ?? 
 
 /** Writes the immutable Result, folds test results into calibrations, and
  * clears any per-set progress the session accumulated during the day.
- * `calibrate: false` skips the calibration fold — for auto-closed partials
- * whose test set was never attempted. */
+ * A null actual means the set was never attempted (an auto-closed partial):
+ * it is recorded as 0, and a test whose measuring set was never attempted
+ * writes no calibration point — a non-attempt must not bend the curve. */
 function commitResult(
   d: AppData,
   p: Plan,
   sessionIndex: number,
   sessionType: SessionType,
-  sets: ResultSet[],
+  sets: SetTemplate[],
+  actuals: (number | null)[],
   date: string,
-  calibrate = true,
 ): void {
-  d.results.push({ id: uid(), planId: p.id, sessionIndex, date, sessionType, sets, completedAt: nowISO() })
+  const resultSets = toResultSets(sets, actuals.map((a) => a ?? 0))
+  d.results.push({ id: uid(), planId: p.id, sessionIndex, date, sessionType, sets: resultSets, completedAt: nowISO() })
   // A test's single-set actual becomes the calibration point that bends
   // the rest of the curve.
-  if (calibrate && sessionType === 'test') p.calibrations.push({ sessionIndex, actual: testCalibrationActual(sets) })
+  if (sessionType === 'test' && actuals[0] != null) {
+    p.calibrations.push({ sessionIndex, actual: testCalibrationActual(resultSets) })
+  }
   if (p.progress?.sessionIndex === sessionIndex) delete p.progress
 }
 
@@ -255,7 +267,7 @@ export function completeSession(
     if (!p || !session) return
     const progress = progressOf(p, sessionIndex, session.sets.length)
     const filled = session.sets.map((s, i) => actuals?.[i] ?? progress[i] ?? s.target)
-    commitResult(d, p, sessionIndex, session.type, toResultSets(session.sets, filled), date)
+    commitResult(d, p, sessionIndex, session.type, session.sets, filled, date)
   })
 }
 
@@ -277,14 +289,7 @@ export function logSet(
     const actuals = progressOf(p, sessionIndex, session.sets.length)
     actuals[setIndex] = actual ?? session.sets[setIndex].target
     if (actuals.every((a) => a != null)) {
-      commitResult(
-        d,
-        p,
-        sessionIndex,
-        session.type,
-        toResultSets(session.sets, actuals as number[]),
-        date,
-      )
+      commitResult(d, p, sessionIndex, session.type, session.sets, actuals, date)
     } else {
       // Keep the day of the first check-off; a fresh session claims today.
       const startedOn =
@@ -295,35 +300,21 @@ export function logSet(
 }
 
 /**
- * Closes out partial sessions whose day has passed: a partial is a session
- * that was trained with fewer reps than planned, so it finalizes as done —
- * checked-off sets keep the reps actually done, missed sets record 0, the
- * Result is dated to the workout day, and the plan advances. A session with
- * no sets done at all is skipped, not partial: it stays due and rolls
- * forward untouched. Idempotent; runs on app open and midnight rollover.
+ * Commits `partialToClose`'s Result for every plan whose partial's day has
+ * passed (see its doc for the semantics), and drops stale progress that can't
+ * close — nothing done at all, or a session the generator no longer produces.
+ * Idempotent; the store runs it whenever data enters (load, import) and the
+ * UI on midnight rollover — there is no backend to do it at actual midnight.
  */
 export function finalizeStalePartials(today: string = todayISO()): void {
-  const touches = (p: Plan): boolean =>
-    !!p.progress && (p.progress.startedOn == null || p.progress.startedOn < today)
-  if (!db.value.plans.some(touches)) return
+  const stale = (p: Plan): boolean => isStalePartial(p.progress, today)
+  if (!db.value.plans.some(stale)) return
   update((d) => {
     for (const p of d.plans) {
-      if (!touches(p)) continue
-      const progress = p.progress!
-      if (progress.startedOn == null) {
-        // Pre-stamp progress (written before startedOn existed): claim today,
-        // so it closes on a later sweep once the day has actually passed.
-        progress.startedOn = today
-        continue
-      }
-      // Stale progress on an archived plan or an already-logged session is a
-      // leftover, not a partial — drop it instead of committing.
-      const orphaned =
-        p.status !== 'active' ||
-        d.results.some((r) => r.planId === p.id && r.sessionIndex === progress.sessionIndex)
-      const close = orphaned ? null : partialToClose(p, today)
+      if (!stale(p)) continue
+      const close = partialToClose(p, today)
       if (close) {
-        commitResult(d, p, close.sessionIndex, close.sessionType, close.sets, close.date, close.calibrate)
+        commitResult(d, p, close.sessionIndex, close.sessionType, close.sets, close.actuals, close.date)
       } else {
         delete p.progress
       }
@@ -373,4 +364,9 @@ export function importJSON(text: string): void {
   const migrated = migrate(parsed)
   db.value = migrated
   localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated))
+  finalizeStalePartials()
 }
+
+// Loaded data may already contain a partial from a past day — close it now,
+// before anything renders. (Midnight rollover while open is the UI's job.)
+finalizeStalePartials()

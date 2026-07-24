@@ -41,9 +41,8 @@ export function App() {
 
   const exercise = exercises.find((e) => e.id === activeTab)
 
-  // Close out partial sessions from past days (done sets keep their reps,
-  // missed sets record 0) — on app open and when the clock crosses midnight.
-  // There is no backend, so "end of day" can only happen on next render.
+  // Close out partial sessions from past days when the clock crosses midnight
+  // while the app stays open; the store itself sweeps on load and import.
   useEffect(() => finalizeStalePartials(today), [today])
 
   // Tab/app-icon notification: how many exercises have a session due today.

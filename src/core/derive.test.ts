@@ -114,19 +114,14 @@ describe('partialToClose', () => {
     ...overrides,
   })
 
-  it('closes a past-day partial: done sets keep their reps, missed sets get 0', () => {
+  it('closes a past-day partial: done sets keep their reps, missed sets stay null', () => {
     const close = partialToClose(partial(), '2026-07-21')
     expect(close).toEqual({
       sessionIndex: 1,
       sessionType: 'normal',
-      sets: [
-        { target: 5, isMinimum: false, actual: 10 },
-        { target: 6, isMinimum: false, actual: 6 },
-        { target: 7, isMinimum: false, actual: 0 },
-        { target: 8, isMinimum: true, actual: 0 },
-      ],
+      sets,
+      actuals: [10, 6, null, null], // null = never attempted; commit records 0
       date: '2026-07-20', // the day the reps happened, not the sweep day
-      calibrate: true,
     })
   })
 
@@ -154,7 +149,7 @@ describe('partialToClose', () => {
     expect(partialToClose(gone, '2026-07-21')).toBeNull()
   })
 
-  it('calibrates a test whose measuring set was done', () => {
+  it('keeps the done measuring set of a test — commit calibrates from it', () => {
     // Session 12 is the first mid-plan max test (13w × 3/wk).
     const test = partial({
       overrides: {},
@@ -162,11 +157,10 @@ describe('partialToClose', () => {
     })
     const close = partialToClose(test, '2026-07-21')
     expect(close?.sessionType).toBe('test')
-    expect(close?.sets[0].actual).toBe(17)
-    expect(close?.calibrate).toBe(true)
+    expect(close?.actuals).toEqual([17])
   })
 
-  it('does not calibrate a test whose measuring set was never attempted', () => {
+  it('keeps an unattempted measuring set null — commit skips calibration', () => {
     // An override added a warm-up set to the test day; only that one was done.
     const test = partial({
       overrides: { 12: { sets: [{ target: 17, isMinimum: false }, { target: 5, isMinimum: false }] } },
@@ -174,8 +168,7 @@ describe('partialToClose', () => {
     })
     const close = partialToClose(test, '2026-07-21')
     expect(close?.sessionType).toBe('test')
-    expect(close?.sets.map((s) => s.actual)).toEqual([0, 5])
-    expect(close?.calibrate).toBe(false)
+    expect(close?.actuals).toEqual([null, 5])
   })
 })
 
