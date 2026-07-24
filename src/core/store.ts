@@ -1,6 +1,6 @@
 import { signal } from '@preact/signals'
 import { todayISO } from './dates'
-import { derivePlanView, effectiveSession, fitProgress, isResultEditable } from './derive'
+import { derivePlanView, effectiveSession, fitProgress, isResultEditable, partialToClose } from './derive'
 import type {
   AppData,
   Exercise,
@@ -221,7 +221,9 @@ const progressOf = (p: Plan, sessionIndex: number, count: number): (number | nul
 const testCalibrationActual = (sets: ResultSet[]): number => sets[0]?.actual ?? 0
 
 /** Writes the immutable Result, folds test results into calibrations, and
- * clears any per-set progress the session accumulated during the day. */
+ * clears any per-set progress the session accumulated during the day.
+ * `calibrate: false` skips the calibration fold — for auto-closed partials
+ * whose test set was never attempted. */
 function commitResult(
   d: AppData,
   p: Plan,
@@ -229,11 +231,12 @@ function commitResult(
   sessionType: SessionType,
   sets: ResultSet[],
   date: string,
+  calibrate = true,
 ): void {
   d.results.push({ id: uid(), planId: p.id, sessionIndex, date, sessionType, sets, completedAt: nowISO() })
   // A test's single-set actual becomes the calibration point that bends
   // the rest of the curve.
-  if (sessionType === 'test') p.calibrations.push({ sessionIndex, actual: testCalibrationActual(sets) })
+  if (calibrate && sessionType === 'test') p.calibrations.push({ sessionIndex, actual: testCalibrationActual(sets) })
   if (p.progress?.sessionIndex === sessionIndex) delete p.progress
 }
 
@@ -283,7 +286,47 @@ export function logSet(
         date,
       )
     } else {
-      p.progress = { sessionIndex, actuals }
+      // Keep the day of the first check-off; a fresh session claims today.
+      const startedOn =
+        p.progress?.sessionIndex === sessionIndex ? (p.progress.startedOn ?? date) : date
+      p.progress = { sessionIndex, actuals, startedOn }
+    }
+  })
+}
+
+/**
+ * Closes out partial sessions whose day has passed: a partial is a session
+ * that was trained with fewer reps than planned, so it finalizes as done —
+ * checked-off sets keep the reps actually done, missed sets record 0, the
+ * Result is dated to the workout day, and the plan advances. A session with
+ * no sets done at all is skipped, not partial: it stays due and rolls
+ * forward untouched. Idempotent; runs on app open and midnight rollover.
+ */
+export function finalizeStalePartials(today: string = todayISO()): void {
+  const touches = (p: Plan): boolean =>
+    !!p.progress && (p.progress.startedOn == null || p.progress.startedOn < today)
+  if (!db.value.plans.some(touches)) return
+  update((d) => {
+    for (const p of d.plans) {
+      if (!touches(p)) continue
+      const progress = p.progress!
+      if (progress.startedOn == null) {
+        // Pre-stamp progress (written before startedOn existed): claim today,
+        // so it closes on a later sweep once the day has actually passed.
+        progress.startedOn = today
+        continue
+      }
+      // Stale progress on an archived plan or an already-logged session is a
+      // leftover, not a partial — drop it instead of committing.
+      const orphaned =
+        p.status !== 'active' ||
+        d.results.some((r) => r.planId === p.id && r.sessionIndex === progress.sessionIndex)
+      const close = orphaned ? null : partialToClose(p, today)
+      if (close) {
+        commitResult(d, p, close.sessionIndex, close.sessionType, close.sets, close.date, close.calibrate)
+      } else {
+        delete p.progress
+      }
     }
   })
 }

@@ -51,6 +51,11 @@ export interface SessionProgress {
   sessionIndex: number
   /** Actual per set, aligned with the session's sets; null = not done yet. */
   actuals: (number | null)[]
+  /** Calendar day (yyyy-mm-dd) the first set was checked off — the day these
+   * reps belong to. Once that day has passed, the partial finalizes into a
+   * Result (missed sets count 0). Optional: progress written before this field
+   * existed is stamped on the next finalize sweep. */
+  startedOn?: string
 }
 
 export interface Plan {

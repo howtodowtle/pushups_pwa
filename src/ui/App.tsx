@@ -1,7 +1,7 @@
 import { CircleQuestionMark, Settings as SettingsIcon, X } from 'lucide-preact'
 import { useEffect, useState } from 'preact/hooks'
 import { todayISO } from '../core/dates'
-import { db, dueExerciseCount, sortedExercises } from '../core/store'
+import { db, dueExerciseCount, finalizeStalePartials, sortedExercises } from '../core/store'
 import { ExerciseTab } from './ExerciseTab'
 import { Help } from './Help'
 import { Settings } from './Settings'
@@ -40,6 +40,11 @@ export function App() {
   }
 
   const exercise = exercises.find((e) => e.id === activeTab)
+
+  // Close out partial sessions from past days (done sets keep their reps,
+  // missed sets record 0) — on app open and when the clock crosses midnight.
+  // There is no backend, so "end of day" can only happen on next render.
+  useEffect(() => finalizeStalePartials(today), [today])
 
   // Tab/app-icon notification: how many exercises have a session due today.
   // Effect deps keep the derivation off pure UI re-renders (tab switches etc.).

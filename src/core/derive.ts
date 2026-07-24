@@ -1,6 +1,6 @@
 import { getGenerator } from './generators'
 import { baseDates, perWeekOf, shiftedDates, weekOf } from './schedule'
-import type { CalibrationPoint, Plan, Result, SessionType, SetTemplate } from './types'
+import type { CalibrationPoint, Plan, Result, ResultSet, SessionType, SetTemplate } from './types'
 
 /**
  * Combines generator output + overrides + results + today into what the UI
@@ -45,6 +45,46 @@ export function effectiveSession(
     .find((x) => x.index === sessionIndex)
   if (!t) return null
   return { type: t.type, sets: plan.overrides[sessionIndex]?.sets ?? t.sets }
+}
+
+/**
+ * The Result a partial session from a past day should close into: done sets
+ * keep the reps actually done, un-done sets record 0, dated to the day the
+ * reps happened. A partial is a session that *was* trained — just with fewer
+ * reps — so the plan advances as if it were fully done. `calibrate` is false
+ * when a test's calibrating set (set 0) was never actually attempted, so a
+ * non-attempt can't fold a 0 into the curve. Returns null when there is
+ * nothing to close: no progress, no date stamp yet, still today, no set done
+ * at all (a skipped session rolls forward instead), or a session index the
+ * generator no longer produces.
+ */
+export function partialToClose(
+  plan: Plan,
+  today: string,
+): {
+  sessionIndex: number
+  sessionType: SessionType
+  sets: ResultSet[]
+  date: string
+  calibrate: boolean
+} | null {
+  const progress = plan.progress
+  if (!progress?.startedOn || progress.startedOn >= today) return null
+  const session = effectiveSession(plan, progress.sessionIndex)
+  if (!session) return null
+  const actuals = fitProgress(progress.actuals, session.sets.length)
+  if (!actuals.some((a) => a != null)) return null
+  return {
+    sessionIndex: progress.sessionIndex,
+    sessionType: session.type,
+    sets: session.sets.map((s, i) => ({
+      target: s.target,
+      isMinimum: s.isMinimum,
+      actual: actuals[i] ?? 0,
+    })),
+    date: progress.startedOn,
+    calibrate: session.type !== 'test' || actuals[0] != null,
+  }
 }
 
 export interface PlanView {
